@@ -1,0 +1,210 @@
+"""Управление контейнерами платформы через Docker Compose на хосте."""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from pathlib import Path
+from typing import Any
+
+from portal.modules import ALL_MODULES, get_enabled_modules
+
+PLATFORM_ROOT = Path(os.getenv("PLATFORM_INSTALL_ROOT", "/opt/road-pdf-platform"))
+COMPOSE_FILE = Path(
+    os.getenv("PLATFORM_COMPOSE_FILE", str(PLATFORM_ROOT / "docker-compose.platform.yml"))
+)
+RUNTIME_ENV = PLATFORM_ROOT / "platform.runtime.env"
+STATE_FILE = PLATFORM_ROOT / "platform.state.json"
+COMPOSE_BIN = os.getenv("DOCKER_COMPOSE_BIN", "docker-compose")
+
+
+def _component_defs() -> dict[str, dict[str, Any]]:
+    return {
+        "masha-print": {
+            "service": "masha-print",
+            "container": "masha-print-service",
+            "profile": None,
+            "publishable": True,
+        },
+        "n8n": {
+            "service": "n8n",
+            "container": "n8n_pipeline",
+            "profile": "local",
+            "publishable": False,
+        },
+        "portal": {
+            "service": "portal",
+            "container": "geo_calc_app",
+            "profile": None,
+            "publishable": True,
+            "no_uninstall": True,
+        },
+        "watchtower": {
+            "service": "watchtower",
+            "container": "watchtower",
+            "profile": None,
+            "publishable": True,
+            "no_uninstall": True,
+        },
+    }
+
+
+def _load_state() -> dict[str, Any]:
+    if STATE_FILE.exists():
+        try:
+            return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            pass
+    return {"disabled_services": [], "portal_modules": list(ALL_MODULES)}
+
+
+def _save_state(state: dict[str, Any]) -> None:
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    _sync_runtime_env(state)
+
+
+def _sync_runtime_env(state: dict[str, Any]) -> None:
+    modules = state.get("portal_modules") or list(ALL_MODULES)
+    lines = [f"PORTAL_MODULES={','.join(modules)}"]
+    RUNTIME_ENV.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _compose(*args: str, timeout: int = 180) -> dict[str, Any]:
+    if not COMPOSE_FILE.exists():
+        return {"ok": False, "error": f"Compose-файл не найден: {COMPOSE_FILE}"}
+    cmd = [COMPOSE_BIN, "-f", str(COMPOSE_FILE)]
+    state = _load_state()
+    disabled = set(state.get("disabled_services") or [])
+    profiles: set[str] = set()
+    for cid, meta in _component_defs().items():
+        if meta.get("profile") and cid not in disabled:
+            profiles.add(meta["profile"])
+    for p in sorted(profiles):
+        cmd.extend(["--profile", p])
+    if RUNTIME_ENV.exists():
+        cmd.extend(["--env-file", str(RUNTIME_ENV)])
+    cmd.extend(args)
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(PLATFORM_ROOT),
+        )
+        if proc.returncode != 0:
+            return {
+                "ok": False,
+                "error": (proc.stderr or proc.stdout or "compose error").strip(),
+                "command": " ".join(cmd),
+            }
+        return {"ok": True, "message": (proc.stdout or "OK").strip(), "command": " ".join(cmd)}
+    except FileNotFoundError:
+        return {"ok": False, "error": f"Не найден {COMPOSE_BIN}. Пересоберите образ портала."}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "Таймаут выполнения docker compose"}
+
+
+def container_running(name: str) -> bool:
+    try:
+        proc = subprocess.run(
+            ["docker", "inspect", "-f", "{{.State.Running}}", name],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return proc.returncode == 0 and proc.stdout.strip() == "true"
+    except Exception:
+        return False
+
+
+def container_exists(name: str) -> bool:
+    if not name:
+        return False
+    try:
+        proc = subprocess.run(
+            ["docker", "inspect", name],
+            capture_output=True,
+            timeout=10,
+        )
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+
+def install_component(component_id: str) -> dict[str, Any]:
+    meta = _component_defs().get(component_id)
+    if not meta:
+        return {"ok": False, "error": "Неизвестный компонент"}
+    if meta.get("no_uninstall") and component_id == "portal":
+        return {"ok": False, "error": "Портал нельзя установить отдельно — он уже ядро системы"}
+    state = _load_state()
+    disabled = set(state.get("disabled_services") or [])
+    disabled.discard(component_id)
+    state["disabled_services"] = sorted(disabled)
+    _save_state(state)
+    result = _compose("up", "-d", meta["service"])
+    result["component_id"] = component_id
+    result["action"] = "install"
+    return result
+
+
+def uninstall_component(component_id: str) -> dict[str, Any]:
+    meta = _component_defs().get(component_id)
+    if not meta:
+        return {"ok": False, "error": "Неизвестный компонент"}
+    if meta.get("no_uninstall"):
+        return {"ok": False, "error": "Этот компонент нельзя удалить — он обязателен для платформы"}
+    state = _load_state()
+    disabled = set(state.get("disabled_services") or [])
+    disabled.add(component_id)
+    state["disabled_services"] = sorted(disabled)
+    _save_state(state)
+    stop = _compose("stop", meta["service"])
+    if not stop.get("ok"):
+        return stop
+    rm = _compose("rm", "-f", meta["service"])
+    rm["component_id"] = component_id
+    rm["action"] = "uninstall"
+    return rm
+
+
+def set_portal_module(module_id: str, enabled: bool) -> dict[str, Any]:
+    if module_id not in ALL_MODULES:
+        return {"ok": False, "error": "Неизвестный модуль портала"}
+    state = _load_state()
+    modules = set(state.get("portal_modules") or list(ALL_MODULES))
+    if enabled:
+        modules.add(module_id)
+    else:
+        modules.discard(module_id)
+    if not modules:
+        return {"ok": False, "error": "Нельзя отключить все модули — оставьте хотя бы один"}
+    state["portal_modules"] = [m for m in ALL_MODULES if m in modules]
+    _save_state(state)
+    result = _compose("up", "-d", "--force-recreate", "portal")
+    result["module_id"] = module_id
+    result["enabled"] = enabled
+    result["portal_modules"] = state["portal_modules"]
+    return result
+
+
+def component_runtime_status(component_id: str) -> dict[str, Any]:
+    meta = _component_defs().get(component_id, {})
+    state = _load_state()
+    disabled = set(state.get("disabled_services") or [])
+    container = meta.get("container", "")
+    running = container_running(container)
+    if component_id in disabled:
+        installed = False
+    elif component_id in ("portal", "watchtower"):
+        installed = True
+    else:
+        installed = container_exists(container)
+    return {
+        "id": component_id,
+        "installed": installed,
+        "running": running,
+        "disabled_in_state": component_id in disabled,
+    }

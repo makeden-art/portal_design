@@ -1,42 +1,51 @@
-# Архитектура портала управления
+# Архитектура платформы
 
-## Концепция
+## Слои
 
 ```mermaid
 flowchart TB
-  user[Пользователь] --> portal[Портал hub :8080]
-  portal --> utilA[Утилита: Поперечники]
-  portal --> utilB[Утилита: Нормоконтроль]
-  portal --> utilC[Утилита: PDF / сметы]
-  portal --> utilD[Утилита: ЭЦП]
-  portal --> services[Сервисы и обновления]
-  portal --> api[API оркестрации]
-  api --> masha[masha-print :8000]
-  api --> n8n[n8n :5678]
+  user[Пользователь] --> portal[Портал portal_design :8080]
+  portal --> hub[Главная /]
+  portal --> services[/services]
+  portal --> plugins[PORTAL_PLUGINS]
+  plugins --> lisp[lisp_Nikolay модуль]
+  lisp --> calc[/calc]
+  lisp --> norm[/norm]
+  lisp --> verify[/verify]
+  lisp --> pdf[/pdf]
+  portal --> masha[masha-print :8000]
+  portal --> n8n[n8n :5678]
   watchtower[Watchtower] --> portal
   watchtower --> masha
 ```
 
-## Принципы UI
+## Принцип разделения
 
-1. **Одна главная** — карточки утилит, версия портала, баннер обновления.
-2. **Единая тема** — тёмный фон, акцент `#38bdf8`, карточки с border-radius 16–20px.
-3. **Сервисы отдельно** — страница `/services`: статус контейнеров, не смешивать с утилитами.
-4. **Не дублировать логику** — тяжёлые операции только через API микросервисов.
+1. **Портал** (`portal_design`) — отдельная сущность: хаб, сервисы, обновления, тема UI.
+2. **Модули** — подключаются через `register(app)` и `register_plugin()`.  
+   `lisp_Nikolay` — один из таких модулей (не ядро).
+3. **Сервисы** — отдельные контейнеры: masha-print, n8n, OpenProject.
 
-## Страницы портала (текущие)
+## API модуля (контракт плагина)
 
-| Путь | Назначение |
-|------|------------|
-| `/` | Хаб утилит |
-| `/services` | Контейнеры, версии, Watchtower |
-| `/calc` | Поперечники / DXF |
-| `/norm` | Пакетный нормоконтроль |
-| `/verify` | Проверка ЭЦП |
-| `/pdf` | Конвейер PDF → сметы |
+```python
+# lisp_Nikolay/portal_utilities/__init__.py
+def register(app: FastAPI) -> None:
+    from portal.modules import register_plugin
+    register_plugin(plugin_id="lisp_Nikolay", modules=..., cards=..., ...)
+    app.include_router(router)
+```
+
+## Страницы
+
+| Путь | Владелец |
+|------|----------|
+| `/` | portal_design |
+| `/services` | portal_design |
+| `/calc`, `/norm`, `/verify`, `/pdf` | lisp_Nikolay (модуль) |
 
 ## Автообновление
 
-- Образы: `makeden/geo_calc_app:latest`, `makeden/masha-print:latest`
-- Метка Docker: `com.centurylinklabs.watchtower.enable=true`
-- Токен: `WATCHTOWER_TOKEN` (общий для портала и Watchtower)
+- Портал: `VERSION` в [portal_design](https://github.com/makeden-art/portal_design)
+- Модуль утилит: образ `makeden/geo_calc_app:latest` (портал + lisp_Nikolay)
+- masha-print: отдельный образ `makeden/masha-print:latest`
