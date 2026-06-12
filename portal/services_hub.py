@@ -359,22 +359,25 @@ def _render_portal_modules_panel() -> str:
     for m in modules_status():
         st = "включён" if m["enabled"] else "отключён"
         cls = "online" if m["enabled"] else "offline"
-        if m["enabled"]:
-            btn = f'<button class="btn sec btn-mod" data-module="{_html_esc(m["id"])}" data-enable="0">Отключить</button>'
-        else:
-            btn = f'<button class="btn btn-mod" data-module="{_html_esc(m["id"])}" data-enable="1">Включить</button>'
+        checked = "checked" if m["enabled"] else ""
+        toggle = (
+            f'<label class="toggle" title="{_html_esc(st)}">'
+            f'<input type="checkbox" class="mod-toggle" data-module="{_html_esc(m["id"])}" {checked} />'
+            f'<span class="toggle-track"><span class="toggle-thumb"></span></span>'
+            f"</label>"
+        )
         rows.append(
             f'<tr><td>{_html_esc(m["label"])}</td>'
             f'<td><code>{_html_esc(m["path"])}</code></td>'
-            f'<td><span class="badge {cls}">{st}</span></td>'
-            f'<td>{btn}</td></tr>'
+            f'<td><span class="badge {cls} mod-status" data-module="{_html_esc(m["id"])}">{st}</span></td>'
+            f'<td class="toggle-cell">{toggle}</td></tr>'
         )
     return f"""
     <div class="card">
       <h2 class="section-title" style="margin-top:0;">Утилиты внутри портала</h2>
-      <p class="muted">Включить или отключить модуль — кнопкой. Портал перезапустится (~20 сек).</p>
+      <p class="muted">Переключателем включите или отключите модуль. Портал перезапустится (~20 сек).</p>
       <table class="mod-table">
-        <thead><tr><th>Модуль</th><th>Путь</th><th>Статус</th><th></th></tr></thead>
+        <thead><tr><th>Модуль</th><th>Путь</th><th>Статус</th><th>Вкл.</th></tr></thead>
         <tbody>{"".join(rows)}</tbody>
       </table>
     </div>"""
@@ -611,8 +614,21 @@ _SERVICES_HTML = """<!DOCTYPE html>
     .mod-table { width:100%; border-collapse:collapse; font-size:13px; margin:12px 0; }
     .mod-table th, .mod-table td { text-align:left; padding:8px 10px; border-bottom:1px solid rgba(148,163,184,.2); }
     .mod-table th { color:var(--soft); font-weight:600; }
+    .toggle-cell { width:72px; }
+    .toggle { position:relative; display:inline-flex; align-items:center; cursor:pointer; }
+    .toggle input { position:absolute; opacity:0; width:0; height:0; }
+    .toggle-track {
+      width:44px; height:24px; background:rgba(248,113,113,.35); border-radius:999px;
+      position:relative; transition:background .2s;
+    }
+    .toggle input:checked + .toggle-track { background:rgba(74,222,128,.45); }
+    .toggle-thumb {
+      position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%;
+      background:#e5e7eb; transition:transform .2s; box-shadow:0 1px 3px rgba(0,0,0,.35);
+    }
+    .toggle input:checked + .toggle-track .toggle-thumb { transform:translateX(20px); background:#4ade80; }
+    .toggle input:disabled + .toggle-track { opacity:.45; cursor:wait; }
     .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-    .btn-mod { padding:4px 10px; font-size:12px; }
   </style>
 </head>
 <body>
@@ -653,20 +669,43 @@ _SERVICES_HTML = """<!DOCTYPE html>
     document.querySelectorAll("[data-uninstall]").forEach(btn => {
       btn.onclick = () => apiPost("/api/components/" + btn.dataset.uninstall + "/uninstall", "Удалить компонент " + btn.dataset.uninstall + "?");
     });
-    document.querySelectorAll(".btn-mod").forEach(btn => {
-      btn.onclick = async () => {
-        const en = btn.dataset.enable === "1";
-        const mid = btn.dataset.module;
-        if (!confirm((en ? "Включить" : "Отключить") + " модуль «" + mid + "»? Портал перезапустится.")) return;
-        const r = await fetch("/api/portal/modules/" + mid, {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({ enabled: en })
-        });
-        const j = await r.json();
-        alert(j.message || j.error || "Готово. Страница обновится через 25 сек.");
-        setTimeout(() => location.reload(), 25000);
-      };
+    document.querySelectorAll(".mod-toggle").forEach(inp => {
+      inp.addEventListener("change", async () => {
+        const en = inp.checked;
+        const mid = inp.dataset.module;
+        const label = inp.closest("tr")?.querySelector("td")?.textContent?.trim() || mid;
+        if (!confirm((en ? "Включить" : "Отключить") + " «" + label + "»? Портал перезапустится.")) {
+          inp.checked = !en;
+          return;
+        }
+        inp.disabled = true;
+        try {
+          const r = await fetch("/api/portal/modules/" + mid, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ enabled: en })
+          });
+          const j = await r.json();
+          if (!r.ok || j.ok === false) {
+            inp.checked = !en;
+            alert(j.error || j.message || "Ошибка переключения модуля");
+            return;
+          }
+          const badge = document.querySelector('.mod-status[data-module="' + mid + '"]');
+          if (badge) {
+            badge.textContent = en ? "включён" : "отключён";
+            badge.classList.toggle("online", en);
+            badge.classList.toggle("offline", !en);
+          }
+          alert("Модуль " + (en ? "включён" : "отключён") + ". Страница обновится через 25 сек.");
+          setTimeout(() => location.reload(), 25000);
+        } catch (e) {
+          inp.checked = !en;
+          alert("Ошибка: " + e);
+        } finally {
+          inp.disabled = false;
+        }
+      });
     });
     document.getElementById("btn-all").onclick = async () => {
       if (!confirm("Обновить все контейнеры с меткой Watchtower?")) return;
