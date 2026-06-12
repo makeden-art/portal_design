@@ -21,21 +21,21 @@ MODULE_CARDS: dict[str, dict[str, str]] = {
     },
     "convert": {
         "href": "/convert",
-        "title": "📄 Convert to PDF",
-        "text": "Конвертация документов в PDF. Репозиторий Convert-to-PDF.",
+        "title": "📄 Перевод в PDF",
+        "text": "Перевод редактируемых документов в PDF. Репозиторий Convert-to-PDF.",
     },
 }
 
 MODULE_LABELS = {
     "calc": "Поперечники",
     "norm": "Нормоконтроль",
-    "convert": "Convert to PDF",
+    "convert": "Перевод в PDF",
 }
 
 MODULE_FEATURES = {
     "calc": "Калькулятор поперечников (lisp_Nikolay)",
     "norm": "Нормоконтроль пакетный (doc-compliance)",
-    "convert": "Конвертация в PDF (Convert-to-PDF)",
+    "convert": "Перевод в PDF (Convert-to-PDF)",
 }
 
 def register(app: FastAPI) -> None:

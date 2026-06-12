@@ -60,6 +60,14 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_convert_api(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/convert")
 
+    @app.api_route("/api/convert-folder", methods=["POST"], include_in_schema=False)
+    async def proxy_convert_folder_api(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/convert-folder")
+
+    @app.api_route("/api/convert-folder-form", methods=["POST"], include_in_schema=False)
+    async def proxy_convert_folder_form(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/convert-folder-form")
+
 
 async def _proxy(request: Request, module: str, base: str, path: str) -> Response:
     if not is_module_enabled(module):
