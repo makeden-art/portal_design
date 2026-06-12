@@ -7,11 +7,13 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 
 from portal.modules import hub_cards_html, is_module_enabled, modules_status
 from portal.platform_control import _load_state, _sync_runtime_env
 from portal.services_hub import router as services_hub_router
+from portal.smb_mount import mount_smb, remount_from_state, smb_status, unmount_smb
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -38,6 +40,47 @@ def create_app() -> FastAPI:
             _sync_runtime_env(_load_state())
         except Exception:
             pass
+        try:
+            remount_from_state()
+        except Exception:
+            pass
+
+    class SmbMountRequest(BaseModel):
+        server: str
+        share: str
+        username: str = ""
+        password: str = ""
+        anonymous: bool = False
+        mount_id: str = "default"
+
+    @app.get("/api/platform/smb/status")
+    async def api_smb_status():
+        return JSONResponse(smb_status())
+
+    @app.post("/api/platform/smb/mount")
+    async def api_smb_mount(body: SmbMountRequest):
+        try:
+            return JSONResponse(
+                mount_smb(
+                    server=body.server,
+                    share=body.share,
+                    username=body.username,
+                    password=body.password,
+                    anonymous=body.anonymous,
+                    mount_id=body.mount_id,
+                )
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @app.post("/api/platform/smb/unmount")
+    async def api_smb_unmount():
+        try:
+            return JSONResponse(unmount_smb())
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.get("/api/portal/modules")
     async def api_portal_modules():
