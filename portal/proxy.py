@@ -68,6 +68,10 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_convert_folder_form(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/convert-folder-form")
 
+    @app.api_route("/api/convert-merge", methods=["POST"], include_in_schema=False)
+    async def proxy_convert_merge(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/convert-merge")
+
 
 async def _proxy(request: Request, module: str, base: str, path: str) -> Response:
     if not is_module_enabled(module):
@@ -85,7 +89,8 @@ async def _proxy(request: Request, module: str, base: str, path: str) -> Respons
     body = await request.body()
 
     try:
-        async with httpx.AsyncClient(timeout=300.0) as client:
+        timeout = 1800.0 if module == "convert" else 300.0
+        async with httpx.AsyncClient(timeout=timeout) as client:
             upstream = await client.request(
                 request.method,
                 target,
