@@ -42,6 +42,12 @@ def _component_defs() -> dict[str, dict[str, Any]]:
             "profile": None,
             "publishable": True,
         },
+        "convert-to-pdf": {
+            "service": "convert-to-pdf",
+            "container": "convert-to-pdf-service",
+            "profile": None,
+            "publishable": True,
+        },
         "masha-print": {
             "service": "masha-print",
             "container": "masha-print-service",

@@ -11,6 +11,7 @@ from portal.modules import is_module_enabled
 
 CALC_URL = os.getenv("CALC_SERVICE_URL", "http://lisp-calc:8000").rstrip("/")
 NORM_URL = os.getenv("NORM_SERVICE_URL", "http://norm-control:8000").rstrip("/")
+CONVERT_URL = os.getenv("CONVERT_SERVICE_URL", "http://convert-to-pdf:8000").rstrip("/")
 
 _HOP_HEADERS = {
     "connection",
@@ -48,6 +49,16 @@ def setup_service_proxies(app: FastAPI) -> None:
     @app.api_route("/process_norm", methods=["POST"], include_in_schema=False)
     async def proxy_norm_api(request: Request) -> Response:
         return await _proxy(request, "norm", NORM_URL, "process_norm")
+
+    @app.api_route("/convert", methods=["GET", "POST", "HEAD", "OPTIONS"], include_in_schema=False)
+    @app.api_route("/convert/{path:path}", methods=["GET", "POST", "HEAD", "OPTIONS"], include_in_schema=False)
+    async def proxy_convert(request: Request, path: str = "") -> Response:
+        sub = f"convert/{path}" if path else "convert"
+        return await _proxy(request, "convert", CONVERT_URL, sub)
+
+    @app.api_route("/api/convert", methods=["POST"], include_in_schema=False)
+    async def proxy_convert_api(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/convert")
 
 
 async def _proxy(request: Request, module: str, base: str, path: str) -> Response:

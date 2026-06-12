@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from portal.modules import register_plugin
 from portal.proxy import setup_service_proxies
 
-MODULE_IDS: tuple[str, ...] = ("calc", "norm")
+MODULE_IDS: tuple[str, ...] = ("calc", "norm", "convert")
 
 MODULE_CARDS: dict[str, dict[str, str]] = {
     "calc": {
@@ -19,16 +19,23 @@ MODULE_CARDS: dict[str, dict[str, str]] = {
         "title": "📏 Нормоконтроль (Пакетный)",
         "text": "Проверка оформления по ГОСТ. Контейнер: Documentation-compliance-control.",
     },
+    "convert": {
+        "href": "/convert",
+        "title": "📄 Convert to PDF",
+        "text": "Конвертация документов в PDF. Репозиторий Convert-to-PDF.",
+    },
 }
 
 MODULE_LABELS = {
     "calc": "Поперечники",
     "norm": "Нормоконтроль",
+    "convert": "Convert to PDF",
 }
 
 MODULE_FEATURES = {
     "calc": "Калькулятор поперечников (lisp_Nikolay)",
     "norm": "Нормоконтроль пакетный (doc-compliance)",
+    "convert": "Конвертация в PDF (Convert-to-PDF)",
 }
 
 def register(app: FastAPI) -> None:
