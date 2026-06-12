@@ -19,8 +19,29 @@ STATE_FILE = PLATFORM_ROOT / "platform.state.json"
 COMPOSE_BIN = os.getenv("DOCKER_COMPOSE_BIN", "docker-compose")
 
 
+def _module_service_map() -> dict[str, str]:
+    try:
+        from portal.module_services import MODULE_SERVICES
+
+        return dict(MODULE_SERVICES)
+    except Exception:
+        return {"calc": "lisp-calc", "norm": "norm-control"}
+
+
 def _component_defs() -> dict[str, dict[str, Any]]:
     return {
+        "lisp-calc": {
+            "service": "lisp-calc",
+            "container": "lisp-calc-service",
+            "profile": None,
+            "publishable": True,
+        },
+        "norm-control": {
+            "service": "norm-control",
+            "container": "norm-control-service",
+            "profile": None,
+            "publishable": True,
+        },
         "masha-print": {
             "service": "masha-print",
             "container": "masha-print-service",
@@ -181,13 +202,24 @@ def set_portal_module(module_id: str, enabled: bool) -> dict[str, Any]:
         modules.add(module_id)
     else:
         modules.discard(module_id)
-    if not modules:
-        return {"ok": False, "error": "Нельзя отключить все модули — оставьте хотя бы один"}
     state["portal_modules"] = [m for m in known if m in modules]
     _save_state(state)
+
+    svc_map = _module_service_map()
+    compose_result: dict[str, Any] = {"ok": True}
+    service = svc_map.get(module_id)
+    if service:
+        if enabled:
+            compose_result = _compose("up", "-d", service)
+        else:
+            compose_result = _compose("stop", service)
+
+    ok = compose_result.get("ok", True)
     return {
-        "ok": True,
-        "message": "Модуль обновлён. Обновите главную страницу, если карточка не исчезла сразу.",
+        "ok": ok,
+        "message": compose_result.get("message")
+        or ("Модуль включён, контейнер запускается." if enabled else "Модуль отключён, контейнер остановлен."),
+        "error": compose_result.get("error"),
         "module_id": module_id,
         "enabled": enabled,
         "portal_modules": state["portal_modules"],
