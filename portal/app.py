@@ -33,11 +33,11 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def _startup() -> None:
+        _load_plugins(app)
         try:
             _sync_runtime_env(_load_state())
         except Exception:
             pass
-        _load_plugins(app)
 
     @app.get("/api/portal/modules")
     async def api_portal_modules():

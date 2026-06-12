@@ -15,6 +15,11 @@ MODULE_FEATURES: dict[str, str] = {}
 ALL_MODULES: tuple[str, ...] = ()
 
 
+def get_all_modules() -> tuple[str, ...]:
+    """Актуальный список модулей (после register_plugin плагинов)."""
+    return ALL_MODULES
+
+
 def register_plugin(
     *,
     plugin_id: str,

@@ -7,7 +7,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from portal.modules import ALL_MODULES, get_enabled_modules
+from portal import modules as portal_modules
+from portal.modules import get_all_modules, get_enabled_modules
 
 PLATFORM_ROOT = Path(os.getenv("PLATFORM_INSTALL_ROOT", "/opt/road-pdf-platform"))
 COMPOSE_FILE = Path(
@@ -55,7 +56,7 @@ def _load_state() -> dict[str, Any]:
             return json.loads(STATE_FILE.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             pass
-    return {"disabled_services": [], "portal_modules": list(ALL_MODULES)}
+    return {"disabled_services": [], "portal_modules": list(get_all_modules())}
 
 
 def _save_state(state: dict[str, Any]) -> None:
@@ -65,7 +66,7 @@ def _save_state(state: dict[str, Any]) -> None:
 
 
 def _sync_runtime_env(state: dict[str, Any]) -> None:
-    modules = state.get("portal_modules") or list(ALL_MODULES)
+    modules = state.get("portal_modules") or list(get_all_modules())
     lines = [f"PORTAL_MODULES={','.join(modules)}"]
     RUNTIME_ENV.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -171,23 +172,27 @@ def uninstall_component(component_id: str) -> dict[str, Any]:
 
 
 def set_portal_module(module_id: str, enabled: bool) -> dict[str, Any]:
-    if module_id not in ALL_MODULES:
+    known = get_all_modules()
+    if module_id not in known:
         return {"ok": False, "error": "Неизвестный модуль портала"}
     state = _load_state()
-    modules = set(state.get("portal_modules") or list(ALL_MODULES))
+    modules = set(state.get("portal_modules") or list(known))
     if enabled:
         modules.add(module_id)
     else:
         modules.discard(module_id)
     if not modules:
         return {"ok": False, "error": "Нельзя отключить все модули — оставьте хотя бы один"}
-    state["portal_modules"] = [m for m in ALL_MODULES if m in modules]
+    state["portal_modules"] = [m for m in known if m in modules]
     _save_state(state)
-    result = _compose("up", "-d", "--force-recreate", "portal")
-    result["module_id"] = module_id
-    result["enabled"] = enabled
-    result["portal_modules"] = state["portal_modules"]
-    return result
+    return {
+        "ok": True,
+        "message": "Модуль обновлён. Обновите главную страницу, если карточка не исчезла сразу.",
+        "module_id": module_id,
+        "enabled": enabled,
+        "portal_modules": state["portal_modules"],
+        "action": "portal_module_toggle",
+    }
 
 
 def component_runtime_status(component_id: str) -> dict[str, Any]:

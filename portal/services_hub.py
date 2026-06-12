@@ -217,7 +217,7 @@ def get_services_config() -> list[dict[str, Any]]:
 def _portal_version() -> str:
     from pathlib import Path
 
-    version_path = Path(__file__).parent / "VERSION"
+    version_path = Path(__file__).resolve().parent.parent / "VERSION"
     if version_path.exists():
         return version_path.read_text(encoding="utf-8").strip()
     return "0.0.0"
@@ -375,7 +375,7 @@ def _render_portal_modules_panel() -> str:
     return f"""
     <div class="card">
       <h2 class="section-title" style="margin-top:0;">Утилиты внутри портала</h2>
-      <p class="muted">Переключателем включите или отключите модуль. Портал перезапустится (~20 сек).</p>
+      <p class="muted">Переключателем включите или отключите модуль. Изменение применяется сразу.</p>
       <table class="mod-table">
         <thead><tr><th>Модуль</th><th>Путь</th><th>Статус</th><th>Вкл.</th></tr></thead>
         <tbody>{"".join(rows)}</tbody>
@@ -674,7 +674,7 @@ _SERVICES_HTML = """<!DOCTYPE html>
         const en = inp.checked;
         const mid = inp.dataset.module;
         const label = inp.closest("tr")?.querySelector("td")?.textContent?.trim() || mid;
-        if (!confirm((en ? "Включить" : "Отключить") + " «" + label + "»? Портал перезапустится.")) {
+        if (!confirm((en ? "Включить" : "Отключить") + " «" + label + "»?")) {
           inp.checked = !en;
           return;
         }
@@ -697,8 +697,7 @@ _SERVICES_HTML = """<!DOCTYPE html>
             badge.classList.toggle("online", en);
             badge.classList.toggle("offline", !en);
           }
-          alert("Модуль " + (en ? "включён" : "отключён") + ". Страница обновится через 25 сек.");
-          setTimeout(() => location.reload(), 25000);
+          setTimeout(() => location.reload(), 800);
         } catch (e) {
           inp.checked = !en;
           alert("Ошибка: " + e);
