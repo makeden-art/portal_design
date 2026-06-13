@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import urllib.request
 from pathlib import Path
 
@@ -16,6 +17,16 @@ from portal.services_hub import router as services_hub_router
 from portal.smb_mount import mount_smb, remount_from_state, smb_status, unmount_smb
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+
+class SmbMountRequest(BaseModel):
+    server: str
+    share: str
+    username: str = ""
+    password: str = ""
+    domain: str = ""
+    anonymous: bool = False
+    mount_id: str = "default"
 
 
 def get_current_version() -> str:
@@ -40,34 +51,30 @@ def create_app() -> FastAPI:
             _sync_runtime_env(_load_state())
         except Exception:
             pass
-        try:
-            remount_from_state()
-        except Exception:
-            pass
+        def _bg_remount() -> None:
+            try:
+                remount_from_state()
+            except Exception:
+                pass
 
-    class SmbMountRequest(BaseModel):
-        server: str
-        share: str
-        username: str = ""
-        password: str = ""
-        anonymous: bool = False
-        mount_id: str = "default"
+        threading.Thread(target=_bg_remount, daemon=True).start()
 
     @app.get("/api/platform/smb/status")
     async def api_smb_status():
         return JSONResponse(smb_status())
 
     @app.post("/api/platform/smb/mount")
-    async def api_smb_mount(body: SmbMountRequest):
+    async def api_smb_mount(payload: SmbMountRequest):
         try:
             return JSONResponse(
                 mount_smb(
-                    server=body.server,
-                    share=body.share,
-                    username=body.username,
-                    password=body.password,
-                    anonymous=body.anonymous,
-                    mount_id=body.mount_id,
+                    server=payload.server,
+                    share=payload.share,
+                    username=payload.username,
+                    password=payload.password,
+                    domain=payload.domain,
+                    anonymous=payload.anonymous,
+                    mount_id=payload.mount_id,
                 )
             )
         except ValueError as e:
