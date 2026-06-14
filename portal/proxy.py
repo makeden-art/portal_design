@@ -84,6 +84,10 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_resolve_paths(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/resolve-paths")
 
+    @app.api_route("/api/check-output", methods=["POST"], include_in_schema=False)
+    async def proxy_check_output(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/check-output")
+
 
 async def _proxy(request: Request, module: str, base: str, path: str) -> Response:
     if not is_module_enabled(module):
