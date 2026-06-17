@@ -1,4 +1,5 @@
 name: Build and Push Portal Image
+# Docker Hub: makeden/portal:latest
 
 on:
   push:
