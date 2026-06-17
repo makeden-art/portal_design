@@ -50,13 +50,7 @@ def _component_defs() -> dict[str, dict[str, Any]]:
         },
         "masha-print": {
             "service": "masha-print",
-            "container": "masha-print-service",
-            "profile": None,
-            "publishable": True,
-        },
-        "masha-print": {
-            "service": "masha-print",
-            "container": "masha-print-service",
+            "container": os.getenv("MASHA_CONTAINER", "masha-print-service"),
             "profile": None,
             "publishable": True,
         },
@@ -135,30 +129,44 @@ def _compose(*args: str, timeout: int = 180) -> dict[str, Any]:
 
 
 def container_running(name: str) -> bool:
-    try:
-        proc = subprocess.run(
-            ["docker", "inspect", "-f", "{{.State.Running}}", name],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        return proc.returncode == 0 and proc.stdout.strip() == "true"
-    except Exception:
-        return False
+    for candidate in _container_names(name):
+        try:
+            proc = subprocess.run(
+                ["docker", "inspect", "-f", "{{.State.Running}}", candidate],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if proc.returncode == 0 and proc.stdout.strip() == "true":
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _container_names(name: str) -> list[str]:
+    aliases = {
+        "masha-print-service": ["masha-print"],
+        "masha-print": ["masha-print-service"],
+    }
+    return [name, *aliases.get(name, [])]
 
 
 def container_exists(name: str) -> bool:
     if not name:
         return False
-    try:
-        proc = subprocess.run(
-            ["docker", "inspect", name],
-            capture_output=True,
-            timeout=10,
-        )
-        return proc.returncode == 0
-    except Exception:
-        return False
+    for candidate in _container_names(name):
+        try:
+            proc = subprocess.run(
+                ["docker", "inspect", candidate],
+                capture_output=True,
+                timeout=10,
+            )
+            if proc.returncode == 0:
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def install_component(component_id: str) -> dict[str, Any]:

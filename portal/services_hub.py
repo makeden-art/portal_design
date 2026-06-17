@@ -146,7 +146,7 @@ def _default_services() -> list[dict[str, Any]]:
             "name": "Портал (geo_calc_app)",
             "description": "Хаб утилит, PDF-конвейер, поперечники, нормоконтроль",
             "container": "geo_calc_app",
-            "image": os.getenv("PORTAL_IMAGE", "makeden/geo_calc_app:latest"),
+            "image": os.getenv("PORTAL_IMAGE", "makeden/portal:latest"),
             "health_url": "http://127.0.0.1:8000/version",
             "public_url": "/",
             "utility_links_dynamic": True,
@@ -158,7 +158,7 @@ def _default_services() -> list[dict[str, Any]]:
             "id": "masha-print",
             "name": "Печать / PDF (masha-print)",
             "description": "Анализ PDF, очередь печати",
-            "container": "masha-print-service",
+            "container": os.getenv("MASHA_CONTAINER", "masha-print-service"),
             "image": os.getenv("MASHA_IMAGE", "makeden/masha-print:latest"),
             "health_url": os.getenv(
                 "MASHA_PRINT_URL", "http://masha-print:8000"

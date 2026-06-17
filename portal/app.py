@@ -93,6 +93,10 @@ def create_app() -> FastAPI:
     async def api_portal_modules():
         return JSONResponse({"modules": modules_status()})
 
+    @app.get("/version")
+    async def version():
+        return JSONResponse({"version": get_current_version(), "service": "portal"})
+
     @app.get("/api/check_update")
     async def check_update():
         current_version = get_current_version()
