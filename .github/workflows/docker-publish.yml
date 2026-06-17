@@ -8,17 +8,12 @@ on:
       - 'docs/**'
       - 'ui/hub-preview.html'
       - 'README.md'
+  workflow_dispatch:
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout platform layout
-        uses: actions/checkout@v4
-        with:
-          repository: makeden-art/lisp_Nikolay
-          path: lisp_Nikolay
-
       - name: Checkout portal_design
         uses: actions/checkout@v4
         with:
@@ -39,4 +34,4 @@ jobs:
           context: .
           file: portal_design/Dockerfile
           push: true
-          tags: makeden/geo_calc_app:latest
+          tags: makeden/portal:latest
