@@ -7,6 +7,7 @@ import json
 import os
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -14,6 +15,7 @@ from fastapi import APIRouter, Body
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from portal.platform_control import (
+    COMPOSE_FILE,
     _component_defs,
     component_runtime_status,
     install_component,
@@ -35,9 +37,17 @@ WATCHTOWER_TOKEN = os.getenv("WATCHTOWER_TOKEN", "platform_watchtower_secret")
 PLATFORM_ROOT = os.getenv("PLATFORM_INSTALL_ROOT", "/opt/road-pdf-platform")
 
 
+def _compose_shell_hint() -> str:
+    compose_name = os.getenv(
+        "PLATFORM_COMPOSE_FILE",
+        str(COMPOSE_FILE),
+    )
+    return f"cd {PLATFORM_ROOT} && docker compose -f {Path(compose_name).name}"
+
+
 def _platform_catalog() -> list[dict[str, Any]]:
     """Полный каталог компонентов платформы (что можно установить)."""
-    compose = f"cd {PLATFORM_ROOT} && docker compose -f docker-compose.platform.yml"
+    compose = _compose_shell_hint()
     return [
         {
             "id": "portal",

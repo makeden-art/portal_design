@@ -54,7 +54,39 @@ docker compose -f docker-compose.platform.yml build portal
 docker compose -f docker-compose.platform.yml up -d portal
 ```
 
-Образ: `makeden/geo_calc_app:latest` (имя сохранено для Watchtower).
+Образ: `makeden/portal:latest`
+
+## Установка на новом клиенте (автоген compose)
+
+Compose-файл генерируется из `portal.platform_services` — один источник правды с UI `/services`.
+
+**Одна команда** (нужен только Docker):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/makeden-art/portal_design/main/scripts/install-client.sh | sudo bash
+```
+
+Или вручную:
+
+```bash
+mkdir -p /opt/road-pdf-platform
+docker pull makeden/portal:latest
+docker run --rm \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /usr/bin/docker:/usr/local/bin/docker:ro \
+  -v /opt/road-pdf-platform:/opt/road-pdf-platform \
+  makeden/portal:latest \
+  python -m portal.compose_cli bootstrap --root /opt/road-pdf-platform --force --pull --up
+```
+
+Только сгенерировать YAML:
+
+```bash
+python -m portal.compose_cli write --root /opt/road-pdf-platform --force
+python -m portal.compose_cli show   # в stdout
+```
+
+Дальше: `http://IP/services` → установить модули.
 
 ## Структура
 

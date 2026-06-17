@@ -9,6 +9,7 @@ from typing import Any
 
 from portal import modules as portal_modules
 from portal.modules import get_all_modules, get_enabled_modules
+from portal.platform_services import component_runtime_defs
 
 PLATFORM_ROOT = Path(os.getenv("PLATFORM_INSTALL_ROOT", "/opt/road-pdf-platform"))
 COMPOSE_FILE = Path(
@@ -29,46 +30,10 @@ def _module_service_map() -> dict[str, str]:
 
 
 def _component_defs() -> dict[str, dict[str, Any]]:
-    return {
-        "lisp-calc": {
-            "service": "lisp-calc",
-            "container": "lisp-calc-service",
-            "profile": None,
-            "publishable": True,
-        },
-        "norm-control": {
-            "service": "norm-control",
-            "container": "norm-control-service",
-            "profile": None,
-            "publishable": True,
-        },
-        "convert-to-pdf": {
-            "service": "convert-to-pdf",
-            "container": "convert-to-pdf-service",
-            "profile": None,
-            "publishable": True,
-        },
-        "masha-print": {
-            "service": "masha-print",
-            "container": os.getenv("MASHA_CONTAINER", "masha-print-service"),
-            "profile": None,
-            "publishable": True,
-        },
-        "portal": {
-            "service": "portal",
-            "container": "geo_calc_app",
-            "profile": None,
-            "publishable": True,
-            "no_uninstall": True,
-        },
-        "watchtower": {
-            "service": "watchtower",
-            "container": "watchtower",
-            "profile": None,
-            "publishable": True,
-            "no_uninstall": True,
-        },
-    }
+    return component_runtime_defs(
+        root=PLATFORM_ROOT,
+        masha_container=os.getenv("MASHA_CONTAINER"),
+    )
 
 
 def _load_state() -> dict[str, Any]:
