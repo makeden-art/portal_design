@@ -54,11 +54,11 @@ def _component_defs() -> dict[str, dict[str, Any]]:
             "profile": None,
             "publishable": True,
         },
-        "n8n": {
-            "service": "n8n",
-            "container": "n8n_pipeline",
-            "profile": "local",
-            "publishable": False,
+        "masha-print": {
+            "service": "masha-print",
+            "container": "masha-print-service",
+            "profile": None,
+            "publishable": True,
         },
         "portal": {
             "service": "portal",
