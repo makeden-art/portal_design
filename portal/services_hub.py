@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -446,17 +447,31 @@ def _render_component_card(c: dict[str, Any]) -> str:
     </div>"""
 
 
-def trigger_watchtower_update(scope: str | None = None) -> dict[str, Any]:
+def trigger_watchtower_update(scope: str | None = None, image: str | None = None) -> dict[str, Any]:
     url = WATCHTOWER_URL
-    if scope:
+    if image:
         sep = "&" if "?" in url else "?"
-        url = f"{url}{sep}scope={scope}"
+        url = f"{url}{sep}image={urllib.parse.quote(image, safe='')}"
+    elif scope:
+        scope_images = {
+            "portal": os.getenv("PORTAL_IMAGE", "makeden/portal:latest"),
+            "masha": os.getenv("MASHA_IMAGE", "makeden/masha-print:latest"),
+            "lisp-calc": "makeden/lisp_calc:latest",
+            "norm-control": "makeden/norm_control:latest",
+            "convert-to-pdf": "makeden/convert-to-pdf:latest",
+        }
+        mapped = scope_images.get(scope)
+        if mapped:
+            sep = "&" if "?" in url else "?"
+            url = f"{url}{sep}image={urllib.parse.quote(mapped, safe='')}"
     try:
         req = urllib.request.Request(url, method="POST")
         req.add_header("Authorization", f"Bearer {WATCHTOWER_TOKEN}")
         with urllib.request.urlopen(req, timeout=15) as resp:
             msg = "Watchtower: проверка обновлений запущена"
-            if scope:
+            if image:
+                msg += f" (image={image})"
+            elif scope:
                 msg += f" (scope={scope})"
             return {"ok": True, "status": resp.status, "message": msg}
     except Exception as e:
@@ -528,7 +543,8 @@ async def api_service_update(service_id: str):
             content={"error": "Этот компонент не обновляется через Watchtower"},
         )
     scope = svc.get("watchtower_scope")
-    result = trigger_watchtower_update(scope=scope)
+    image = svc.get("image")
+    result = trigger_watchtower_update(scope=scope, image=image)
     result["service_id"] = service_id
     result["container"] = svc.get("container")
     scope_hint = f" scope={scope}" if scope else ""

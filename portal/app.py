@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import threading
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -124,10 +125,9 @@ def create_app() -> FastAPI:
     async def do_update():
         watchtower_url = os.getenv("WATCHTOWER_URL", "http://watchtower:8080/v1/update")
         watchtower_token = os.getenv("WATCHTOWER_TOKEN", "platform_watchtower_secret")
-        scope = os.getenv("WATCHTOWER_SCOPE", "portal").strip()
-        if scope:
-            sep = "&" if "?" in watchtower_url else "?"
-            watchtower_url = f"{watchtower_url}{sep}scope={scope}"
+        portal_image = os.getenv("PORTAL_IMAGE", "makeden/portal:latest")
+        sep = "&" if "?" in watchtower_url else "?"
+        watchtower_url = f"{watchtower_url}{sep}image={urllib.parse.quote(portal_image, safe='')}"
         try:
             req = urllib.request.Request(watchtower_url, method="POST")
             req.add_header("Authorization", f"Bearer {watchtower_token}")
