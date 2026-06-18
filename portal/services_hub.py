@@ -18,6 +18,7 @@ from portal.platform_control import (
     COMPOSE_FILE,
     _component_defs,
     component_runtime_status,
+    container_image_version,
     install_component,
     set_portal_module,
     uninstall_component,
@@ -290,8 +291,10 @@ async def _fetch_module_version(component_id: str) -> str:
             ver = body.get("version")
             if ver:
                 return str(ver).strip()
-        if h.get("healthy"):
-            return "up"
+    meta = _component_defs().get(component_id, {})
+    label_ver = container_image_version(meta.get("container", ""))
+    if label_ver:
+        return label_ver
     return "—"
 
 

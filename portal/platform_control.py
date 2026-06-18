@@ -114,6 +114,17 @@ def compose_service_for_image(image: str) -> str | None:
         os.getenv("MASHA_IMAGE", "makeden/masha-print:latest"): "masha-print",
     }
     return mapping.get(image)
+
+
+def _container_names(name: str) -> list[str]:
+    aliases = {
+        "masha-print-service": ["masha-print"],
+        "masha-print": ["masha-print-service"],
+    }
+    return [name, *aliases.get(name, [])]
+
+
+def container_running(name: str) -> bool:
     for candidate in _container_names(name):
         try:
             proc = subprocess.run(
@@ -129,12 +140,31 @@ def compose_service_for_image(image: str) -> str | None:
     return False
 
 
-def _container_names(name: str) -> list[str]:
-    aliases = {
-        "masha-print-service": ["masha-print"],
-        "masha-print": ["masha-print-service"],
-    }
-    return [name, *aliases.get(name, [])]
+def container_image_version(container_name: str) -> str | None:
+    """Версия из OCI-метки образа (fallback, если /version в контейнере старый)."""
+    if not container_name:
+        return None
+    for candidate in _container_names(container_name):
+        try:
+            proc = subprocess.run(
+                [
+                    "docker",
+                    "inspect",
+                    "-f",
+                    '{{index .Config.Labels "org.opencontainers.image.version"}}',
+                    candidate,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if proc.returncode == 0:
+                ver = proc.stdout.strip()
+                if ver and ver != "<no value>":
+                    return ver
+        except Exception:
+            continue
+    return None
 
 
 def container_exists(name: str) -> bool:
