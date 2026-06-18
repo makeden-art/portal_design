@@ -123,22 +123,19 @@ def create_app() -> FastAPI:
 
     @app.post("/api/do_update")
     async def do_update():
-        watchtower_url = os.getenv("WATCHTOWER_URL", "http://watchtower:8080/v1/update")
-        watchtower_token = os.getenv("WATCHTOWER_TOKEN", "platform_watchtower_secret")
+        from portal.services_hub import trigger_watchtower_update
+
         portal_image = os.getenv("PORTAL_IMAGE", "makeden/portal:latest")
-        sep = "&" if "?" in watchtower_url else "?"
-        watchtower_url = f"{watchtower_url}{sep}image={urllib.parse.quote(portal_image, safe='')}"
-        try:
-            req = urllib.request.Request(watchtower_url, method="POST")
-            req.add_header("Authorization", f"Bearer {watchtower_token}")
-            with urllib.request.urlopen(req, timeout=10) as response:
-                response.read()
-            return JSONResponse({"status": "ok", "message": "Update triggered successfully."})
-        except Exception as e:
-            err_str = str(e).lower()
-            if "timed out" in err_str or "reset" in err_str or "disconnected" in err_str:
-                return JSONResponse({"status": "ok", "message": "Update triggered (background)."})
-            return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+        result = trigger_watchtower_update(image=portal_image)
+        status = 200 if result.get("ok") else 500
+        return JSONResponse(
+            status_code=status,
+            content={
+                "status": "ok" if result.get("ok") else "error",
+                "message": result.get("message") or result.get("error", ""),
+                **result,
+            },
+        )
 
     @app.get("/", response_class=HTMLResponse)
     async def hub() -> str:

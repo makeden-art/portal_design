@@ -93,7 +93,27 @@ def _compose(*args: str, timeout: int = 180) -> dict[str, Any]:
         return {"ok": False, "error": "Таймаут выполнения docker compose"}
 
 
-def container_running(name: str) -> bool:
+def compose_update_service(service: str) -> dict[str, Any]:
+    """Обновить сервис через docker compose pull + up (fallback без Watchtower)."""
+    pull = _compose("pull", service, timeout=300)
+    if not pull.get("ok"):
+        return {**pull, "via": "compose"}
+    up = _compose("up", "-d", service, "--no-build", "--force-recreate", timeout=180)
+    up["via"] = "compose"
+    return up
+
+
+def compose_service_for_image(image: str) -> str | None:
+    portal_image = os.getenv("PORTAL_IMAGE", "makeden/portal:latest")
+    mapping = {
+        portal_image: "portal",
+        "makeden/portal:latest": "portal",
+        "makeden/lisp_calc:latest": "lisp-calc",
+        "makeden/norm_control:latest": "norm-control",
+        "makeden/convert-to-pdf:latest": "convert-to-pdf",
+        os.getenv("MASHA_IMAGE", "makeden/masha-print:latest"): "masha-print",
+    }
+    return mapping.get(image)
     for candidate in _container_names(name):
         try:
             proc = subprocess.run(

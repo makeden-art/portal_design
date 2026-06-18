@@ -490,7 +490,10 @@ def _render_component_card(c: dict[str, Any]) -> str:
 
 
 def trigger_watchtower_update(scope: str | None = None, image: str | None = None) -> dict[str, Any]:
+    from portal.platform_control import compose_service_for_image, compose_update_service
+
     url = WATCHTOWER_URL
+    target_image = image
     if image:
         sep = "&" if "?" in url else "?"
         url = f"{url}{sep}image={urllib.parse.quote(image, safe='')}"
@@ -502,24 +505,73 @@ def trigger_watchtower_update(scope: str | None = None, image: str | None = None
             "norm-control": "makeden/norm_control:latest",
             "convert-to-pdf": "makeden/convert-to-pdf:latest",
         }
-        mapped = scope_images.get(scope)
-        if mapped:
+        target_image = scope_images.get(scope)
+        if target_image:
             sep = "&" if "?" in url else "?"
-            url = f"{url}{sep}image={urllib.parse.quote(mapped, safe='')}"
+            url = f"{url}{sep}image={urllib.parse.quote(target_image, safe='')}"
     try:
         req = urllib.request.Request(url, method="POST")
         req.add_header("Authorization", f"Bearer {WATCHTOWER_TOKEN}")
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            raw = resp.read().decode()
+            payload: dict[str, Any] = {}
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                pass
+            summary = payload.get("summary", {})
+            scanned = int(summary.get("scanned", -1))
+            updated = int(summary.get("updated", 0))
+            if scanned == 0 and target_image:
+                service = compose_service_for_image(target_image)
+                if service:
+                    fb = compose_update_service(service)
+                    if fb.get("ok"):
+                        return {
+                            "ok": True,
+                            "message": (
+                                f"Watchtower: scanned=0 → обновлено через compose ({service})"
+                            ),
+                            "via": "compose",
+                            "watchtower": payload,
+                        }
+                    return {
+                        "ok": False,
+                        "error": fb.get("error", "compose update failed"),
+                        "via": "compose",
+                        "watchtower": payload,
+                    }
             msg = "Watchtower: проверка обновлений запущена"
-            if image:
-                msg += f" (image={image})"
-            elif scope:
-                msg += f" (scope={scope})"
-            return {"ok": True, "status": resp.status, "message": msg}
+            if target_image:
+                msg += f" (image={target_image})"
+            if scanned >= 0:
+                msg += f", scanned={scanned}, updated={updated}"
+            return {"ok": True, "status": resp.status, "message": msg, "watchtower": payload}
     except Exception as e:
         err = str(e).lower()
+        if target_image and ("timed out" in err or "reset" in err):
+            service = compose_service_for_image(target_image)
+            if service:
+                fb = compose_update_service(service)
+                if fb.get("ok"):
+                    return {
+                        "ok": True,
+                        "message": f"Watchtower timeout → обновлено через compose ({service})",
+                        "via": "compose",
+                    }
         if "timed out" in err or "reset" in err:
             return {"ok": True, "message": "Обновление запущено в фоне (watchtower)"}
+        if target_image:
+            service = compose_service_for_image(target_image)
+            if service:
+                fb = compose_update_service(service)
+                if fb.get("ok"):
+                    return {
+                        "ok": True,
+                        "message": f"Watchtower недоступен → обновлено через compose ({service})",
+                        "via": "compose",
+                    }
+                return {"ok": False, "error": fb.get("error", str(e)), "via": "compose"}
         return {"ok": False, "error": str(e)}
 
 
