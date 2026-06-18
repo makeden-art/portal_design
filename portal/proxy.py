@@ -84,6 +84,10 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_resolve_paths(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/resolve-paths")
 
+    @app.api_route("/api/convert-merge-download", methods=["POST"], include_in_schema=False)
+    async def proxy_convert_merge_download(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/convert-merge-download")
+
     @app.api_route("/api/check-output", methods=["POST"], include_in_schema=False)
     async def proxy_check_output(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/check-output")
