@@ -268,6 +268,33 @@ async def _service_version(svc: dict[str, Any]) -> str:
     return "—"
 
 
+def _module_service_base(component_id: str) -> str | None:
+    """Внутренний URL модуля в docker-сети платформы."""
+    mapping = {
+        "lisp-calc": os.getenv("CALC_SERVICE_URL", "http://lisp-calc:8000"),
+        "norm-control": os.getenv("NORM_SERVICE_URL", "http://norm-control:8000"),
+        "convert-to-pdf": os.getenv("CONVERT_SERVICE_URL", "http://convert-to-pdf:8000"),
+    }
+    base = mapping.get(component_id)
+    return base.rstrip("/") if base else None
+
+
+async def _fetch_module_version(component_id: str) -> str:
+    base = _module_service_base(component_id)
+    if not base:
+        return "—"
+    for path in ("/version", "/health"):
+        h = await _fetch_health(base + path)
+        body = h.get("body")
+        if isinstance(body, dict):
+            ver = body.get("version")
+            if ver:
+                return str(ver).strip()
+        if h.get("healthy"):
+            return "up"
+    return "—"
+
+
 def _status_from_health(health: dict[str, Any]) -> str:
     if health.get("healthy"):
         return "online"
@@ -343,7 +370,12 @@ async def build_platform_components() -> list[dict[str, Any]]:
             row["installed"] = rt["installed"]
             row["running"] = rt["running"]
             row["controllable"] = True
-            if not rt["running"]:
+            if rt["running"]:
+                row["status"] = "online"
+                mod_ver = await _fetch_module_version(cid)
+                if mod_ver != "—":
+                    row["version"] = mod_ver
+            else:
                 row["status"] = "offline"
         else:
             row["controllable"] = False
