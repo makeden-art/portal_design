@@ -17,6 +17,7 @@ from portal.modules import hub_cards_html, is_module_enabled, modules_status
 from portal.platform_control import _load_state, _sync_runtime_env
 from portal.services_hub import router as services_hub_router
 from portal.smb_mount import mount_smb, remount_from_state, smb_status, unmount_smb
+from portal.update_check import check_all_updates, check_portal_update, portal_version
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -32,11 +33,7 @@ class SmbMountRequest(BaseModel):
 
 
 def get_current_version() -> str:
-    root = Path(__file__).resolve().parent.parent
-    version_path = root / "VERSION"
-    if version_path.exists():
-        return version_path.read_text(encoding="utf-8").strip()
-    return "1.0.0"
+    return portal_version()
 
 
 def create_app() -> FastAPI:
@@ -101,26 +98,11 @@ def create_app() -> FastAPI:
 
     @app.get("/api/check_update")
     async def check_update():
-        current_version = get_current_version()
-        try:
-            url = "https://raw.githubusercontent.com/makeden-art/portal_design/main/VERSION"
-            req = urllib.request.Request(url, method="GET")
-            github_token = os.getenv("GITHUB_TOKEN")
-            if github_token:
-                req.add_header("Authorization", f"token {github_token}")
-            with urllib.request.urlopen(req, timeout=5) as response:
-                remote_version = response.read().decode("utf-8").strip()
+        return JSONResponse(check_portal_update())
 
-            def parse_version(v: str) -> tuple:
-                try:
-                    return tuple(map(int, v.strip().split(".")))
-                except Exception:
-                    return (0, 0, 0)
-
-            has_update = bool(remote_version and parse_version(remote_version) > parse_version(current_version))
-            return JSONResponse({"current": current_version, "remote": remote_version, "has_update": has_update})
-        except Exception as e:
-            return JSONResponse({"current": current_version, "remote": "unknown", "has_update": False, "error": str(e)})
+    @app.get("/api/check_updates")
+    async def check_updates():
+        return JSONResponse(await check_all_updates())
 
     @app.post("/api/do_update")
     async def do_update():
@@ -175,13 +157,29 @@ def create_app() -> FastAPI:
             border-radius: 8px; font-weight: 600; cursor: pointer;
           }
           .primary-btn:disabled { opacity: 0.5; }
+          .update-badge {
+            align-self: flex-start; font-size: 11px; font-weight: 600;
+            background: rgba(34, 197, 94, 0.2); color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.5); border-radius: 999px;
+            padding: 2px 8px; margin-bottom: 4px;
+          }
+          .card.has-update { border-color: rgba(34, 197, 94, 0.55); }
+          .update-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+          .sec-btn {
+            background: transparent; color: var(--accent); border: 1px solid var(--accent);
+            padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer;
+            text-decoration: none; font-size: 14px;
+          }
         </style>
       </head>
       <body class="portal">
         <div class="hub-container portal-container">
           <div id="update-banner" class="update-banner">
-            <span style="font-size: 14px;">🚀 Доступна новая версия: <b id="update-version" style="color: #4ade80;"></b></span>
-            <button id="btn-do-update" class="primary-btn">Обновить</button>
+            <span id="update-text" style="font-size: 14px;"></span>
+            <div class="update-actions">
+              <a href="/services" id="btn-services" class="sec-btn" style="display:none;">Сервисы →</a>
+              <button id="btn-do-update" class="primary-btn" style="display:none;">Обновить портал</button>
+            </div>
           </div>
           <div class="title">
             <h1>Инженерные Утилиты</h1>
@@ -193,21 +191,40 @@ def create_app() -> FastAPI:
           <div class="footer">Версия портала: <b>v{{VERSION}}</b></div>
         </div>
         <script>
-          fetch("/api/check_update").then(r=>r.json()).then(d=>{
-            if(d.has_update){
-              document.getElementById("update-version").textContent = "v"+d.remote;
-              document.getElementById("update-banner").style.display = "flex";
+          fetch("/api/check_updates").then(r=>r.json()).then(d=>{
+            const parts = [];
+            if (d.portal && d.portal.has_update) {
+              parts.push("Портал v" + d.portal.remote);
+              const btn = document.getElementById("btn-do-update");
+              if (btn) btn.style.display = "inline-block";
             }
+            (d.modules || []).forEach(m => {
+              if (!m.has_update) return;
+              parts.push(m.name + " v" + m.remote);
+              const card = document.querySelector('[data-module="' + m.id + '"]');
+              if (card) {
+                card.classList.add("has-update");
+                if (!card.querySelector(".update-badge")) {
+                  card.insertAdjacentHTML("afterbegin", '<span class="update-badge">доступно обновление</span>');
+                }
+              }
+            });
+            if (!parts.length) return;
+            document.getElementById("update-text").innerHTML =
+              "🚀 Доступны обновления: <b style=\"color:#4ade80\">" + parts.join(", ") + "</b>";
+            document.getElementById("update-banner").style.display = "flex";
+            const svcBtn = document.getElementById("btn-services");
+            if (svcBtn && (d.modules || []).some(m => m.has_update)) svcBtn.style.display = "inline-block";
           });
           const btn = document.getElementById("btn-do-update");
           if(btn){
             btn.onclick = () => {
-              if(!confirm("Запустить автоматическое обновление? Приложение будет перезапущено.")) return;
+              if(!confirm("Запустить автоматическое обновление портала? Приложение будет перезапущено.")) return;
               btn.disabled = true; btn.textContent = "Обновление...";
               fetch("/api/do_update", {method: "POST"}).then(r=>r.json()).then(d=>{
                 if(d.status==="ok"){ alert("Команда отправлена! Страница перезагрузится через 20 секунд."); setTimeout(()=>location.reload(), 20000); }
-                else { alert("Ошибка: "+d.message); btn.disabled=false; btn.textContent="Обновить"; }
-              }).catch(e=>{ alert("Ошибка: "+e); btn.disabled=false; btn.textContent="Обновить"; });
+                else { alert("Ошибка: "+d.message); btn.disabled=false; btn.textContent="Обновить портал"; }
+              }).catch(e=>{ alert("Ошибка: "+e); btn.disabled=false; btn.textContent="Обновить портал"; });
             };
           }
         </script>

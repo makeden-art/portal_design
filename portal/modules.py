@@ -92,7 +92,7 @@ def hub_cards_html() -> str:
             continue
         c = MODULE_CARDS[mid]
         parts.append(
-            f'<a href="{c["href"]}" class="card">'
+            f'<a href="{c["href"]}" class="card" data-module="{mid}">'
             f'<h2>{c["title"]}</h2><p>{c["text"]}</p></a>'
         )
     parts.append(
