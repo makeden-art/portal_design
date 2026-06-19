@@ -40,8 +40,20 @@ def _validate_server(server: str) -> str:
 def _validate_share(share: str) -> str:
     share = share.strip().strip("/")
     if not share or ".." in share:
-        raise ValueError("Укажите имя шары без .. и слэшей")
+        raise ValueError("Укажите имя шары (можно с подпапкой: scan/pdf)")
     return share
+
+
+def _parse_share(share: str) -> tuple[str, str]:
+    """Имя шары и необязательный путь внутри неё (scan/pdf → scan, pdf)."""
+    share = _validate_share(share)
+    if "/" not in share:
+        return share, ""
+    name, subpath = share.split("/", 1)
+    subpath = subpath.strip("/")
+    if not name:
+        raise ValueError("Укажите имя шары перед слэшем (например scan/pdf)")
+    return name, subpath
 
 
 def _validate_mount_id(mount_id: str) -> str:
@@ -111,6 +123,8 @@ def _parse_username(username: str, domain: str = "") -> tuple[str, str]:
         domain, username = username.split("\\", 1)
     elif "/" in username:
         domain, username = username.split("/", 1)
+    elif "@" in username:
+        username, domain = username.rsplit("@", 1)
     return domain.strip(), username.strip()
 
 
@@ -130,6 +144,11 @@ def _format_mount_error(err: str) -> str:
         return (
             "Не удалось подключиться к шаре (часто из-за отказа в доступе). "
             "Проверьте права пользователя на шару и папку."
+        )
+    if "bad_network_name" in low:
+        return (
+            "Шара не найдена (BAD_NETWORK_NAME). Укажите имя шары и подпапку через слэш: "
+            "scan/pdf — шара scan, каталог pdf внутри."
         )
     return err
 
@@ -161,21 +180,28 @@ def _cleanup_stale_cifs(mount_path: str) -> None:
         pass
 
 
-def _test_smbclient(unc: str, creds_file: Path, mount_id: str = "default") -> None:
+def _test_smbclient(
+    unc: str,
+    creds_file: Path,
+    mount_id: str = "default",
+    share_path: str = "",
+) -> None:
     """Проверка доступа к шаре через smbclient в контейнере convert."""
     container_creds = _push_creds_to_convert(creds_file, mount_id)
+    cmd = [
+        _docker_bin(),
+        "exec",
+        CONVERT_CONTAINER,
+        "smbclient",
+        unc,
+        "-A",
+        container_creds,
+    ]
+    if share_path:
+        cmd.extend(["-D", share_path.replace("/", "\\")])
+    cmd.extend(["-c", "ls"])
     proc = subprocess.run(
-        [
-            _docker_bin(),
-            "exec",
-            CONVERT_CONTAINER,
-            "smbclient",
-            unc,
-            "-A",
-            container_creds,
-            "-c",
-            "ls",
-        ],
+        cmd,
         capture_output=True,
         text=True,
         timeout=45,
@@ -194,7 +220,8 @@ def _smb_accessible() -> bool:
     if not unc or not creds.exists():
         return False
     try:
-        _test_smbclient(unc, creds, mount_id)
+        share_path = (info.get("share_path") or "").strip().strip("/")
+        _test_smbclient(unc, creds, mount_id, share_path)
         return True
     except Exception:
         return False
@@ -226,13 +253,13 @@ def mount_smb(
     mount_id: str = "default",
 ) -> dict[str, Any]:
     server = _validate_server(server)
-    share = _validate_share(share)
+    share_name, share_path = _parse_share(share)
     mount_id = _validate_mount_id(mount_id)
     mount_path = _mount_path(mount_id)
     mount_path.mkdir(parents=True, exist_ok=True)
     SECRETS_DIR.mkdir(parents=True, exist_ok=True)
 
-    unc = f"//{server}/{share}"
+    unc = f"//{server}/{share_name}"
     domain = domain.strip()
     user_display = "guest"
 
@@ -251,14 +278,17 @@ def mount_smb(
     user_display = f"{domain}\\{user}" if domain else user
 
     _cleanup_stale_cifs(str(mount_path))
-    _test_smbclient(unc, creds_file, mount_id)
+    _test_smbclient(unc, creds_file, mount_id, share_path)
 
     convert_path = f"/data/smb/{mount_id}"
     host_path = str(mount_path)
+    share_label = f"{share_name}/{share_path}" if share_path else share_name
     info = {
         "mount_id": mount_id,
         "server": server,
-        "share": share,
+        "share": share_name,
+        "share_path": share_path,
+        "share_label": share_label,
         "anonymous": anonymous,
         "username": user_display,
         "domain": domain,
@@ -285,9 +315,10 @@ def remount_from_state() -> dict[str, Any] | None:
     if not creds.exists():
         return {"ok": False, "error": "Нет сохранённых учётных данных SMB"}
     unc = info.get("unc") or f"//{info['server']}/{info['share']}"
+    share_path = (info.get("share_path") or "").strip().strip("/")
     try:
         _cleanup_stale_cifs(info.get("mount_path", ""))
-        _test_smbclient(unc, creds, mount_id)
+        _test_smbclient(unc, creds, mount_id, share_path)
         state["smb_mounted"] = True
         _save_state(state)
         return {"ok": True, "mounted": True, "mount": info}
