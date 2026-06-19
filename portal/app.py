@@ -1,6 +1,7 @@
 """Ядро портала: хаб, обновления, страница сервисов."""
 from __future__ import annotations
 
+import asyncio
 import os
 import threading
 import urllib.parse
@@ -62,22 +63,22 @@ def create_app() -> FastAPI:
 
     @app.get("/api/platform/smb/status")
     async def api_smb_status():
-        return JSONResponse(smb_status())
+        return JSONResponse(await asyncio.to_thread(smb_status))
 
     @app.post("/api/platform/smb/mount")
     async def api_smb_mount(payload: SmbMountRequest):
         try:
-            return JSONResponse(
-                mount_smb(
-                    server=payload.server,
-                    share=payload.share,
-                    username=payload.username,
-                    password=payload.password,
-                    domain=payload.domain,
-                    anonymous=payload.anonymous,
-                    mount_id=payload.mount_id,
-                )
+            result = await asyncio.to_thread(
+                mount_smb,
+                server=payload.server,
+                share=payload.share,
+                username=payload.username,
+                password=payload.password,
+                domain=payload.domain,
+                anonymous=payload.anonymous,
+                mount_id=payload.mount_id,
             )
+            return JSONResponse(result)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:
@@ -86,7 +87,7 @@ def create_app() -> FastAPI:
     @app.post("/api/platform/smb/unmount")
     async def api_smb_unmount():
         try:
-            return JSONResponse(unmount_smb())
+            return JSONResponse(await asyncio.to_thread(unmount_smb))
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
 
