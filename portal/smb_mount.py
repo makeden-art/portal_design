@@ -188,6 +188,8 @@ def _test_smbclient(
 ) -> None:
     """Проверка доступа к шаре через smbclient в контейнере convert."""
     container_creds = _push_creds_to_convert(creds_file, mount_id)
+    remote = share_path.replace("/", "\\").strip("\\") if share_path else ""
+    smb_cmd = f'cd "{remote}"; ls' if remote else "ls"
     cmd = [
         _docker_bin(),
         "exec",
@@ -196,10 +198,9 @@ def _test_smbclient(
         unc,
         "-A",
         container_creds,
+        "-c",
+        smb_cmd,
     ]
-    if share_path:
-        cmd.extend(["-D", share_path.replace("/", "\\")])
-    cmd.extend(["-c", "ls"])
     proc = subprocess.run(
         cmd,
         capture_output=True,
