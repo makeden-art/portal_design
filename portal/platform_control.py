@@ -124,52 +124,25 @@ def _container_names(name: str) -> list[str]:
     return [name, *aliases.get(name, [])]
 
 
-def container_running(name: str) -> bool:
-    for candidate in _container_names(name):
-        try:
-            proc = subprocess.run(
-                ["docker", "inspect", "-f", "{{.State.Running}}", candidate],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if proc.returncode == 0 and proc.stdout.strip() == "true":
-                return True
-        except Exception:
-            continue
-    return False
+def _docker_ps_names(filter_arg: str) -> list[str]:
+    try:
+        proc = subprocess.run(
+            ["docker", "ps", "-a", "--filter", filter_arg, "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if proc.returncode != 0:
+            return []
+        return [n.strip() for n in proc.stdout.splitlines() if n.strip()]
+    except Exception:
+        return []
 
 
-def container_image_version(container_name: str) -> str | None:
-    """Версия из OCI-метки образа (fallback, если /version в контейнере старый)."""
-    if not container_name:
-        return None
-    for candidate in _container_names(container_name):
-        try:
-            proc = subprocess.run(
-                [
-                    "docker",
-                    "inspect",
-                    "-f",
-                    '{{index .Config.Labels "org.opencontainers.image.version"}}',
-                    candidate,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if proc.returncode == 0:
-                ver = proc.stdout.strip()
-                if ver and ver != "<no value>":
-                    return ver
-        except Exception:
-            continue
-    return None
-
-
-def container_exists(name: str) -> bool:
+def resolve_container(name: str, compose_service: str | None = None) -> str | None:
+    """Имя контейнера: точное, по compose-метке или по подстроке (orphan-префикс)."""
     if not name:
-        return False
+        return None
     for candidate in _container_names(name):
         try:
             proc = subprocess.run(
@@ -178,10 +151,67 @@ def container_exists(name: str) -> bool:
                 timeout=10,
             )
             if proc.returncode == 0:
-                return True
+                return candidate
         except Exception:
             continue
-    return False
+    if compose_service:
+        by_label = _docker_ps_names(f"label=com.docker.compose.service={compose_service}")
+        if by_label:
+            return by_label[0]
+    by_name = _docker_ps_names(f"name={name}")
+    if by_name:
+        for candidate in by_name:
+            if candidate == name or candidate.endswith(f"_{name}"):
+                return candidate
+        return by_name[0]
+    return None
+
+
+def container_running(name: str, compose_service: str | None = None) -> bool:
+    resolved = resolve_container(name, compose_service)
+    if not resolved:
+        return False
+    try:
+        proc = subprocess.run(
+            ["docker", "inspect", "-f", "{{.State.Running}}", resolved],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return proc.returncode == 0 and proc.stdout.strip() == "true"
+    except Exception:
+        return False
+
+
+def container_image_version(container_name: str, compose_service: str | None = None) -> str | None:
+    """Версия из OCI-метки образа (fallback, если /version в контейнере старый)."""
+    resolved = resolve_container(container_name, compose_service)
+    if not resolved:
+        return None
+    try:
+        proc = subprocess.run(
+            [
+                "docker",
+                "inspect",
+                "-f",
+                '{{index .Config.Labels "org.opencontainers.image.version"}}',
+                resolved,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if proc.returncode == 0:
+            ver = proc.stdout.strip()
+            if ver and ver != "<no value>":
+                return ver
+    except Exception:
+        pass
+    return None
+
+
+def container_exists(name: str, compose_service: str | None = None) -> bool:
+    return resolve_container(name, compose_service) is not None
 
 
 def install_component(component_id: str) -> dict[str, Any]:
@@ -261,13 +291,14 @@ def component_runtime_status(component_id: str) -> dict[str, Any]:
     state = _load_state()
     disabled = set(state.get("disabled_services") or [])
     container = meta.get("container", "")
-    running = container_running(container)
+    service = meta.get("service")
+    running = container_running(container, service)
     if component_id in disabled:
         installed = False
     elif component_id in ("portal", "watchtower"):
         installed = True
     else:
-        installed = container_exists(container)
+        installed = container_exists(container, service)
     return {
         "id": component_id,
         "installed": installed,

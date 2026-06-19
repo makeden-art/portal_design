@@ -292,7 +292,7 @@ async def _fetch_module_version(component_id: str) -> str:
             if ver:
                 return str(ver).strip()
     meta = _component_defs().get(component_id, {})
-    label_ver = container_image_version(meta.get("container", ""))
+    label_ver = container_image_version(meta.get("container", ""), meta.get("service"))
     if label_ver:
         return label_ver
     return "—"

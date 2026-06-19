@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from portal.platform_control import PLATFORM_ROOT, _load_state, _save_state
+from portal.platform_control import PLATFORM_ROOT, _load_state, _save_state, resolve_container
 
 SECRETS_DIR = PLATFORM_ROOT / "secrets" / "smb"
 MNT_ROOT = PLATFORM_ROOT / "mnt" / "smb"
@@ -75,10 +75,17 @@ def _container_creds_path(mount_id: str) -> str:
     return f"/tmp/smb-{mount_id}.creds"
 
 
+def _convert_container_name() -> str | None:
+    return resolve_container(CONVERT_CONTAINER, "convert-to-pdf")
+
+
 def _convert_container_running() -> bool:
+    name = _convert_container_name()
+    if not name:
+        return False
     try:
         proc = subprocess.run(
-            [_docker_bin(), "inspect", "-f", "{{.State.Running}}", CONVERT_CONTAINER],
+            [_docker_bin(), "inspect", "-f", "{{.State.Running}}", name],
             capture_output=True,
             text=True,
             timeout=10,
@@ -95,13 +102,19 @@ def _push_creds_to_convert(creds_file: Path, mount_id: str) -> str:
             "Контейнер convert-to-pdf не запущен. "
             "Установите модуль «Перевод в PDF» на странице «Сервисы»."
         )
+    container = _convert_container_name()
+    if not container:
+        raise RuntimeError(
+            "Контейнер convert-to-pdf не запущен. "
+            "Установите модуль «Перевод в PDF» на странице «Сервисы»."
+        )
     container_path = _container_creds_path(mount_id)
     proc = subprocess.run(
         [
             _docker_bin(),
             "exec",
             "-i",
-            CONVERT_CONTAINER,
+            container,
             "bash",
             "-c",
             f"umask 077 && cat > {container_path}",
@@ -187,13 +200,16 @@ def _test_smbclient(
     share_path: str = "",
 ) -> None:
     """Проверка доступа к шаре через smbclient в контейнере convert."""
+    container = _convert_container_name()
+    if not container:
+        raise RuntimeError("Контейнер convert-to-pdf не запущен")
     container_creds = _push_creds_to_convert(creds_file, mount_id)
     remote = share_path.replace("/", "\\").strip("\\") if share_path else ""
     smb_cmd = f'cd "{remote}"; ls' if remote else "ls"
     cmd = [
         _docker_bin(),
         "exec",
-        CONVERT_CONTAINER,
+        container,
         "smbclient",
         unc,
         "-A",
