@@ -88,6 +88,14 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_convert_merge_download(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/convert-merge-download")
 
+    @app.api_route("/api/convert-jobs", methods=["GET"], include_in_schema=False)
+    async def proxy_convert_jobs_list(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/convert-jobs")
+
+    @app.api_route("/api/convert-jobs/queue", methods=["GET"], include_in_schema=False)
+    async def proxy_convert_jobs_queue(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/convert-jobs/queue")
+
     @app.api_route("/api/convert-jobs/{job_id}", methods=["GET"], include_in_schema=False)
     async def proxy_convert_jobs(request: Request, job_id: str) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, f"api/convert-jobs/{job_id}")
