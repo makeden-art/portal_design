@@ -59,6 +59,51 @@ def _creds_path(mount_id: str) -> Path:
     return SECRETS_DIR / f"{mount_id}.creds"
 
 
+def _container_creds_path(mount_id: str) -> str:
+    return f"/tmp/smb-{mount_id}.creds"
+
+
+def _convert_container_running() -> bool:
+    try:
+        proc = subprocess.run(
+            [_docker_bin(), "inspect", "-f", "{{.State.Running}}", CONVERT_CONTAINER],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return proc.returncode == 0 and proc.stdout.strip() == "true"
+    except Exception:
+        return False
+
+
+def _push_creds_to_convert(creds_file: Path, mount_id: str) -> str:
+    """Передать файл учётных данных внутрь convert-to-pdf (без общего volume)."""
+    if not _convert_container_running():
+        raise RuntimeError(
+            "Контейнер convert-to-pdf не запущен. "
+            "Установите модуль «Перевод в PDF» на странице «Сервисы»."
+        )
+    container_path = _container_creds_path(mount_id)
+    proc = subprocess.run(
+        [
+            _docker_bin(),
+            "exec",
+            "-i",
+            CONVERT_CONTAINER,
+            "bash",
+            "-c",
+            f"umask 077 && cat > {container_path}",
+        ],
+        input=creds_file.read_bytes(),
+        capture_output=True,
+        timeout=30,
+    )
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "docker exec error").strip()
+        raise RuntimeError(f"Не удалось передать учётные данные в convert-to-pdf: {err}")
+    return container_path
+
+
 def _parse_username(username: str, domain: str = "") -> tuple[str, str]:
     username = username.strip()
     domain = domain.strip()
@@ -71,6 +116,11 @@ def _parse_username(username: str, domain: str = "") -> tuple[str, str]:
 
 def _format_mount_error(err: str) -> str:
     low = err.lower()
+    if "authentication file" in low or "credentials file" in low:
+        return (
+            "Не удалось прочитать файл учётных данных внутри convert-to-pdf. "
+            "Перезапустите контейнер convert-to-pdf и повторите подключение."
+        )
     if "access denied" in low or "status_access_denied" in low or "return code = -13" in low:
         return (
             "Windows отклонил вход (ACCESS_DENIED). Проверьте логин/пароль, "
@@ -111,8 +161,9 @@ def _cleanup_stale_cifs(mount_path: str) -> None:
         pass
 
 
-def _test_smbclient(unc: str, creds_file: Path) -> None:
+def _test_smbclient(unc: str, creds_file: Path, mount_id: str = "default") -> None:
     """Проверка доступа к шаре через smbclient в контейнере convert."""
+    container_creds = _push_creds_to_convert(creds_file, mount_id)
     proc = subprocess.run(
         [
             _docker_bin(),
@@ -121,7 +172,7 @@ def _test_smbclient(unc: str, creds_file: Path) -> None:
             "smbclient",
             unc,
             "-A",
-            str(creds_file),
+            container_creds,
             "-c",
             "ls",
         ],
@@ -143,7 +194,7 @@ def _smb_accessible() -> bool:
     if not unc or not creds.exists():
         return False
     try:
-        _test_smbclient(unc, creds)
+        _test_smbclient(unc, creds, mount_id)
         return True
     except Exception:
         return False
@@ -200,7 +251,7 @@ def mount_smb(
     user_display = f"{domain}\\{user}" if domain else user
 
     _cleanup_stale_cifs(str(mount_path))
-    _test_smbclient(unc, creds_file)
+    _test_smbclient(unc, creds_file, mount_id)
 
     convert_path = f"/data/smb/{mount_id}"
     host_path = str(mount_path)
@@ -236,7 +287,7 @@ def remount_from_state() -> dict[str, Any] | None:
     unc = info.get("unc") or f"//{info['server']}/{info['share']}"
     try:
         _cleanup_stale_cifs(info.get("mount_path", ""))
-        _test_smbclient(unc, creds)
+        _test_smbclient(unc, creds, mount_id)
         state["smb_mounted"] = True
         _save_state(state)
         return {"ok": True, "mounted": True, "mount": info}
