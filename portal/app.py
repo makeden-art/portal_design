@@ -4,8 +4,6 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
-import urllib.parse
-import urllib.request
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
