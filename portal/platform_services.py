@@ -115,12 +115,14 @@ def service_catalog(
             ports=("8084:8000",),
             environment=(
                 f"CONVERT_ALLOWED_ROOTS=/data,/workspace,{root_s}",
-                "CONVERT_UVICORN_CONCURRENCY=32",
+                "CONVERT_UVICORN_CONCURRENCY=16",
+                "CONVERT_CHILD_MEM_MB=3072",
+                "CONVERT_MERGE_WORKERS=1",
             ),
             command=(
                 "sh",
                 "-c",
-                "exec uvicorn app:app --host 0.0.0.0 --port 8000 --limit-concurrency ${CONVERT_UVICORN_CONCURRENCY:-32}",
+                "exec uvicorn app:app --host 0.0.0.0 --port 8000 --limit-concurrency ${CONVERT_UVICORN_CONCURRENCY:-16}",
             ),
             volumes=(
                 "convert-data:/data",
