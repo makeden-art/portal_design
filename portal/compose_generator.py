@@ -91,6 +91,8 @@ def _service_to_dict(spec: Any) -> dict[str, Any]:
         "container_name": spec.container_name,
         "restart": spec.restart,
     }
+    if spec.id == "portal":
+        svc["extra_hosts"] = ["host.docker.internal:host-gateway"]
     if spec.ports:
         svc["ports"] = list(spec.ports)
     if spec.environment:

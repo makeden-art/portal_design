@@ -23,6 +23,7 @@ from portal.platform_control import (
     set_portal_module,
     uninstall_component,
 )
+from portal.service_urls import component_base_urls
 from portal.modules import (
     modules_config_hint,
     modules_status,
@@ -281,16 +282,14 @@ def _module_service_base(component_id: str) -> str | None:
 
 
 async def _fetch_module_version(component_id: str) -> str:
-    base = _module_service_base(component_id)
-    if not base:
-        return "—"
-    for path in ("/version", "/health"):
-        h = await _fetch_health(base + path)
-        body = h.get("body")
-        if isinstance(body, dict):
-            ver = body.get("version")
-            if ver:
-                return str(ver).strip()
+    for base in component_base_urls(component_id):
+        for path in ("/version", "/health"):
+            h = await _fetch_health(base + path)
+            body = h.get("body")
+            if isinstance(body, dict):
+                ver = body.get("version")
+                if ver:
+                    return str(ver).strip()
     meta = _component_defs().get(component_id, {})
     label_ver = container_image_version(meta.get("container", ""), meta.get("service"))
     if label_ver:

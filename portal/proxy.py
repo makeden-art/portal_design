@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 
 from portal.module_services import MODULE_SERVICES
 from portal.modules import is_module_enabled
+from portal.service_urls import module_base_urls
 
 CALC_URL = os.getenv("CALC_SERVICE_URL", "http://lisp-calc:8000").rstrip("/")
 NORM_URL = os.getenv("NORM_SERVICE_URL", "http://norm-control:8000").rstrip("/")
@@ -109,38 +110,47 @@ async def _proxy(request: Request, module: str, base: str, path: str) -> Respons
     if not is_module_enabled(module):
         raise HTTPException(status_code=404, detail=f"Модуль «{module}» отключён")
 
-    target = f"{base}/{path}" if path else base + request.url.path
-    if request.url.query:
-        target = f"{target}?{request.url.query}"
-
     headers = {
         k: v
         for k, v in request.headers.items()
         if k.lower() not in _HOP_HEADERS
     }
     body = await request.body()
+    timeout = 1800.0 if module == "convert" else 300.0
+    bases = module_base_urls(module) or [base.rstrip("/")]
+    last_error: Exception | None = None
 
-    try:
-        timeout = 1800.0 if module == "convert" else 300.0
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            upstream = await client.request(
-                request.method,
-                target,
-                headers=headers,
-                content=body if body else None,
+    for idx, service_base in enumerate(bases):
+        target = f"{service_base}/{path}" if path else service_base + request.url.path
+        if request.url.query:
+            target = f"{target}?{request.url.query}"
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                upstream = await client.request(
+                    request.method,
+                    target,
+                    headers=headers,
+                    content=body if body else None,
+                )
+            resp_headers = {
+                k: v
+                for k, v in upstream.headers.items()
+                if k.lower() not in _HOP_HEADERS
+            }
+            return Response(
+                content=upstream.content,
+                status_code=upstream.status_code,
+                headers=resp_headers,
             )
-    except httpx.ConnectError:
-        service = MODULE_SERVICES.get(module, module)
-        raise HTTPException(
-            status_code=503,
-            detail=f"Сервис «{module}» не запущен. Включите модуль на /services (контейнер {service}).",
-        ) from None
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Ошибка сервиса {module}: {e}") from e
+        except httpx.ConnectError as e:
+            last_error = e
+            if idx + 1 < len(bases):
+                continue
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"Ошибка сервиса {module}: {e}") from e
 
-    resp_headers = {
-        k: v
-        for k, v in upstream.headers.items()
-        if k.lower() not in _HOP_HEADERS
-    }
-    return Response(content=upstream.content, status_code=upstream.status_code, headers=resp_headers)
+    service = MODULE_SERVICES.get(module, module)
+    raise HTTPException(
+        status_code=503,
+        detail=f"Сервис «{module}» не запущен. Включите модуль на /services (контейнер {service}).",
+    ) from last_error
