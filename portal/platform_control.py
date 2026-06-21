@@ -103,6 +103,75 @@ def compose_update_service(service: str) -> dict[str, Any]:
     return up
 
 
+def boot_service_names() -> list[str]:
+    """Compose-сервисы для автозапуска (всё установленное, кроме disabled_services)."""
+    state = _load_state()
+    disabled = set(state.get("disabled_services") or [])
+    names: list[str] = []
+    for cid, meta in _component_defs().items():
+        if cid in disabled:
+            continue
+        svc = meta.get("service")
+        if svc and svc not in names:
+            names.append(svc)
+    return names
+
+
+def ensure_platform_running() -> dict[str, Any]:
+    """Поднять сервисы платформы после перезагрузки хоста."""
+    state = _load_state()
+    disabled = set(state.get("disabled_services") or [])
+    started: list[str] = []
+    compose_needed: list[str] = []
+    errors: list[str] = []
+
+    for cid, meta in _component_defs().items():
+        if cid in disabled:
+            continue
+        service = meta.get("service")
+        container = meta.get("container", "")
+        if not service:
+            continue
+        if container_running(container, service):
+            continue
+        resolved = resolve_container(container, service)
+        if resolved:
+            try:
+                proc = subprocess.run(
+                    ["docker", "start", resolved],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                if proc.returncode == 0:
+                    started.append(resolved)
+                else:
+                    errors.append(f"{resolved}: {(proc.stderr or proc.stdout).strip()}")
+                    compose_needed.append(service)
+            except Exception as e:
+                errors.append(f"{resolved}: {e}")
+                compose_needed.append(service)
+        else:
+            compose_needed.append(service)
+
+    compose_needed = [s for s in dict.fromkeys(compose_needed) if s]
+    compose_result: dict[str, Any] = {"ok": True}
+    if compose_needed:
+        compose_result = _compose(
+            "up", "-d", *compose_needed, "--no-build", "--no-recreate", timeout=300
+        )
+
+    ok = compose_result.get("ok", True) and not errors
+    return {
+        "ok": ok,
+        "started": started,
+        "compose_services": compose_needed,
+        "message": compose_result.get("message"),
+        "error": compose_result.get("error") or ("; ".join(errors) if errors else None),
+        "action": "boot",
+    }
+
+
 def compose_service_for_image(image: str) -> str | None:
     portal_image = os.getenv("PORTAL_IMAGE", "makeden/portal:latest")
     mapping = {

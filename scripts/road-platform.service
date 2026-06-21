@@ -1,0 +1,18 @@
+[Unit]
+Description=Road PDF Platform (docker compose)
+Documentation=https://github.com/makeden-art/portal_design
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=PLATFORM_INSTALL_ROOT=/opt/road-pdf-platform
+Environment=PLATFORM_COMPOSE_FILE=/opt/road-pdf-platform/docker-compose.client.yml
+Environment=PORTAL_IMAGE=makeden/portal:latest
+ExecStart=/opt/road-pdf-platform/scripts/platform-boot.sh
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

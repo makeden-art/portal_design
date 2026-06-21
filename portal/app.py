@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 
 from portal.modules import hub_cards_html, is_module_enabled, modules_status
-from portal.platform_control import _load_state, _sync_runtime_env
+from portal.platform_control import _load_state, _sync_runtime_env, ensure_platform_running
 from portal.services_hub import router as services_hub_router
 from portal.smb_mount import mount_smb, remount_from_state, smb_status, unmount_smb
 from portal.update_check import check_all_updates, check_portal_update, portal_version
@@ -49,6 +49,10 @@ def create_app() -> FastAPI:
         except Exception:
             pass
         def _bg_remount() -> None:
+            try:
+                ensure_platform_running()
+            except Exception:
+                pass
             try:
                 remount_from_state()
             except Exception:

@@ -12,6 +12,17 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
+if command -v systemctl >/dev/null 2>&1; then
+  echo "→ включение автозапуска Docker"
+  systemctl enable docker 2>/dev/null || true
+fi
+
+mkdir -p "$ROOT/scripts"
+SCRIPT_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/platform-boot.sh"
+if [[ -f "$SCRIPT_SRC" ]]; then
+  install -m 755 "$SCRIPT_SRC" "$ROOT/scripts/platform-boot.sh"
+fi
+
 mkdir -p "$ROOT"
 
 echo "→ pull $PORTAL_IMAGE"
@@ -37,6 +48,17 @@ docker run --rm \
 if docker ps --format '{{.Names}}' | grep -qx masha-print; then
   echo "→ подключение masha-print к сети road-platform"
   docker network connect road-platform masha-print 2>/dev/null || true
+fi
+
+if command -v systemctl >/dev/null 2>&1 && [[ -f "$ROOT/scripts/platform-boot.sh" ]]; then
+  echo "→ systemd: автозапуск платформы после перезагрузки"
+  UNIT_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/road-platform.service"
+  if [[ -f "$UNIT_SRC" ]]; then
+    sed "s|/opt/road-pdf-platform|$ROOT|g" "$UNIT_SRC" > /etc/systemd/system/road-platform.service
+    sed -i "s|docker-compose.client.yml|$(basename "$COMPOSE_FILE")|g" /etc/systemd/system/road-platform.service
+    systemctl daemon-reload
+    systemctl enable road-platform.service
+  fi
 fi
 
 echo ""
