@@ -26,6 +26,7 @@ class ServiceSpec:
     networks: tuple[str, ...] = ("road-platform",)
     restart: str = "unless-stopped"
     client_compose: bool = True
+    command: tuple[str, ...] | None = None
     no_uninstall: bool = False
     profile: str | None = None
     publishable: bool = True
@@ -114,6 +115,12 @@ def service_catalog(
             ports=("8084:8000",),
             environment=(
                 f"CONVERT_ALLOWED_ROOTS=/data,/workspace,{root_s}",
+                "CONVERT_UVICORN_CONCURRENCY=32",
+            ),
+            command=(
+                "sh",
+                "-c",
+                "exec uvicorn app:app --host 0.0.0.0 --port 8000 --limit-concurrency ${CONVERT_UVICORN_CONCURRENCY:-32}",
             ),
             volumes=(
                 "convert-data:/data",

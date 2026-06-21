@@ -101,6 +101,8 @@ def _service_to_dict(spec: Any) -> dict[str, Any]:
         svc["labels"] = dict(spec.labels)
     if spec.networks:
         svc["networks"] = list(spec.networks)
+    if spec.command:
+        svc["command"] = list(spec.command)
     if spec.profile:
         svc["profiles"] = [spec.profile]
     return svc
