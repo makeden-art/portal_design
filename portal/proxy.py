@@ -109,6 +109,22 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_check_output(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/check-output")
 
+    @app.api_route("/api/detect-frames", methods=["GET"], include_in_schema=False)
+    async def proxy_detect_frames(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/detect-frames")
+
+    @app.api_route("/api/preview-info", methods=["GET"], include_in_schema=False)
+    async def proxy_preview_info(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/preview-info")
+
+    @app.api_route("/api/preview", methods=["GET"], include_in_schema=False)
+    async def proxy_preview(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/preview")
+
+    @app.api_route("/api/view-document", methods=["GET"], include_in_schema=False)
+    async def proxy_view_document(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/view-document")
+
 
 async def _proxy(request: Request, module: str, base: str, path: str) -> Response:
     if not is_module_enabled(module):
