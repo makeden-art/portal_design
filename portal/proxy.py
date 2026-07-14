@@ -69,6 +69,10 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_setup_cad_server(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/setup-cad-server")
 
+    @app.api_route("/api/cad-server-ping", methods=["GET"], include_in_schema=False)
+    async def proxy_cad_server_ping(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/cad-server-ping")
+
     @app.api_route("/api/convert-folder", methods=["POST"], include_in_schema=False)
     async def proxy_convert_folder_api(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/convert-folder")
