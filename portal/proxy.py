@@ -137,6 +137,14 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_view_document(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/view-document")
 
+    @app.api_route("/api/create-folder-smb", methods=["POST"], include_in_schema=False)
+    async def proxy_create_folder_smb(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/create-folder-smb")
+
+    @app.api_route("/api/upload-to-smb", methods=["POST"], include_in_schema=False)
+    async def proxy_upload_to_smb(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/upload-to-smb")
+
 
 async def _proxy(request: Request, module: str, base: str, path: str) -> Response:
     if not is_module_enabled(module):
