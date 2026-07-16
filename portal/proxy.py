@@ -145,6 +145,10 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_upload_to_smb(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/upload-to-smb")
 
+    @app.api_route("/api/delete-smb", methods=["POST"], include_in_schema=False)
+    async def proxy_delete_smb(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/delete-smb")
+
 
 async def _proxy(request: Request, module: str, base: str, path: str) -> Response:
     if not is_module_enabled(module):
