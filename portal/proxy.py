@@ -63,6 +63,22 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_convert_api(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/convert")
 
+    @app.api_route("/api/cad-server-script", methods=["GET"], include_in_schema=False)
+    async def proxy_cad_server_script(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/cad-server-script")
+
+    @app.api_route("/api/setup-cad-server", methods=["GET"], include_in_schema=False)
+    async def proxy_setup_cad_server(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/setup-cad-server")
+
+    @app.api_route("/api/uninstall-cad-server", methods=["GET"], include_in_schema=False)
+    async def proxy_uninstall_cad_server(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/uninstall-cad-server")
+
+    @app.api_route("/api/cad-server-ping", methods=["GET"], include_in_schema=False)
+    async def proxy_cad_server_ping(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/cad-server-ping")
+
     @app.api_route("/api/convert-folder", methods=["POST"], include_in_schema=False)
     async def proxy_convert_folder_api(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/convert-folder")
@@ -111,6 +127,18 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_convert_jobs_queue(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/convert-jobs/queue")
 
+    @app.api_route("/api/convert-jobs/{job_id}/cancel", methods=["POST"], include_in_schema=False)
+    async def proxy_convert_jobs_cancel(request: Request, job_id: str) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, f"api/convert-jobs/{job_id}/cancel")
+
+    @app.api_route("/api/convert-jobs/{job_id}", methods=["GET"], include_in_schema=False)
+    async def proxy_convert_jobs(request: Request, job_id: str) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, f"api/convert-jobs/{job_id}")
+
+    @app.api_route("/api/check-output", methods=["POST"], include_in_schema=False)
+    async def proxy_check_output(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/check-output")
+
     @app.api_route("/api/detect-frames", methods=["GET"], include_in_schema=False)
     async def proxy_detect_frames(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/detect-frames")
@@ -127,17 +155,17 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_view_document(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/view-document")
 
-    @app.api_route("/api/convert-jobs/{job_id}/cancel", methods=["POST"], include_in_schema=False)
-    async def proxy_convert_jobs_cancel(request: Request, job_id: str) -> Response:
-        return await _proxy(request, "convert", CONVERT_URL, f"api/convert-jobs/{job_id}/cancel")
+    @app.api_route("/api/create-folder-smb", methods=["POST"], include_in_schema=False)
+    async def proxy_create_folder_smb(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/create-folder-smb")
 
-    @app.api_route("/api/convert-jobs/{job_id}", methods=["GET"], include_in_schema=False)
-    async def proxy_convert_jobs(request: Request, job_id: str) -> Response:
-        return await _proxy(request, "convert", CONVERT_URL, f"api/convert-jobs/{job_id}")
+    @app.api_route("/api/upload-to-smb", methods=["POST"], include_in_schema=False)
+    async def proxy_upload_to_smb(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/upload-to-smb")
 
-    @app.api_route("/api/check-output", methods=["POST"], include_in_schema=False)
-    async def proxy_check_output(request: Request) -> Response:
-        return await _proxy(request, "convert", CONVERT_URL, "api/check-output")
+    @app.api_route("/api/delete-smb", methods=["POST"], include_in_schema=False)
+    async def proxy_delete_smb(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/delete-smb")
 
 
 async def _proxy(request: Request, module: str, base: str, path: str) -> Response:
