@@ -5,6 +5,8 @@ import os
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 
 from portal.module_services import MODULE_SERVICES
 from portal.modules import is_module_enabled
@@ -61,18 +63,6 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_convert_api(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/convert")
 
-    @app.api_route("/api/cad-server-script", methods=["GET"], include_in_schema=False)
-    async def proxy_cad_server_script(request: Request) -> Response:
-        return await _proxy(request, "convert", CONVERT_URL, "api/cad-server-script")
-
-    @app.api_route("/api/setup-cad-server", methods=["GET"], include_in_schema=False)
-    async def proxy_setup_cad_server(request: Request) -> Response:
-        return await _proxy(request, "convert", CONVERT_URL, "api/setup-cad-server")
-
-    @app.api_route("/api/cad-server-ping", methods=["GET"], include_in_schema=False)
-    async def proxy_cad_server_ping(request: Request) -> Response:
-        return await _proxy(request, "convert", CONVERT_URL, "api/cad-server-ping")
-
     @app.api_route("/api/convert-folder", methods=["POST"], include_in_schema=False)
     async def proxy_convert_folder_api(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/convert-folder")
@@ -97,6 +87,18 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_resolve_paths(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/resolve-paths")
 
+    @app.api_route("/api/upload-to-smb", methods=["POST"], include_in_schema=False)
+    async def proxy_upload_to_smb(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/upload-to-smb")
+
+    @app.api_route("/api/create-folder-smb", methods=["POST"], include_in_schema=False)
+    async def proxy_create_folder_smb(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/create-folder-smb")
+
+    @app.api_route("/api/delete-smb", methods=["POST"], include_in_schema=False)
+    async def proxy_delete_smb(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/delete-smb")
+
     @app.api_route("/api/convert-merge-download", methods=["POST"], include_in_schema=False)
     async def proxy_convert_merge_download(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/convert-merge-download")
@@ -108,18 +110,6 @@ def setup_service_proxies(app: FastAPI) -> None:
     @app.api_route("/api/convert-jobs/queue", methods=["GET"], include_in_schema=False)
     async def proxy_convert_jobs_queue(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/convert-jobs/queue")
-
-    @app.api_route("/api/convert-jobs/{job_id}/cancel", methods=["POST"], include_in_schema=False)
-    async def proxy_convert_jobs_cancel(request: Request, job_id: str) -> Response:
-        return await _proxy(request, "convert", CONVERT_URL, f"api/convert-jobs/{job_id}/cancel")
-
-    @app.api_route("/api/convert-jobs/{job_id}", methods=["GET"], include_in_schema=False)
-    async def proxy_convert_jobs(request: Request, job_id: str) -> Response:
-        return await _proxy(request, "convert", CONVERT_URL, f"api/convert-jobs/{job_id}")
-
-    @app.api_route("/api/check-output", methods=["POST"], include_in_schema=False)
-    async def proxy_check_output(request: Request) -> Response:
-        return await _proxy(request, "convert", CONVERT_URL, "api/check-output")
 
     @app.api_route("/api/detect-frames", methods=["GET"], include_in_schema=False)
     async def proxy_detect_frames(request: Request) -> Response:
@@ -137,17 +127,17 @@ def setup_service_proxies(app: FastAPI) -> None:
     async def proxy_view_document(request: Request) -> Response:
         return await _proxy(request, "convert", CONVERT_URL, "api/view-document")
 
-    @app.api_route("/api/create-folder-smb", methods=["POST"], include_in_schema=False)
-    async def proxy_create_folder_smb(request: Request) -> Response:
-        return await _proxy(request, "convert", CONVERT_URL, "api/create-folder-smb")
+    @app.api_route("/api/convert-jobs/{job_id}/cancel", methods=["POST"], include_in_schema=False)
+    async def proxy_convert_jobs_cancel(request: Request, job_id: str) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, f"api/convert-jobs/{job_id}/cancel")
 
-    @app.api_route("/api/upload-to-smb", methods=["POST"], include_in_schema=False)
-    async def proxy_upload_to_smb(request: Request) -> Response:
-        return await _proxy(request, "convert", CONVERT_URL, "api/upload-to-smb")
+    @app.api_route("/api/convert-jobs/{job_id}", methods=["GET"], include_in_schema=False)
+    async def proxy_convert_jobs(request: Request, job_id: str) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, f"api/convert-jobs/{job_id}")
 
-    @app.api_route("/api/delete-smb", methods=["POST"], include_in_schema=False)
-    async def proxy_delete_smb(request: Request) -> Response:
-        return await _proxy(request, "convert", CONVERT_URL, "api/delete-smb")
+    @app.api_route("/api/check-output", methods=["POST"], include_in_schema=False)
+    async def proxy_check_output(request: Request) -> Response:
+        return await _proxy(request, "convert", CONVERT_URL, "api/check-output")
 
 
 async def _proxy(request: Request, module: str, base: str, path: str) -> Response:
@@ -159,7 +149,6 @@ async def _proxy(request: Request, module: str, base: str, path: str) -> Respons
         for k, v in request.headers.items()
         if k.lower() not in _HOP_HEADERS
     }
-    body = await request.body()
     timeout = 1800.0 if module == "convert" else 300.0
     bases = module_base_urls(module) or [base.rstrip("/")]
     last_error: Exception | None = None
@@ -168,29 +157,40 @@ async def _proxy(request: Request, module: str, base: str, path: str) -> Respons
         target = f"{service_base}/{path}" if path else service_base + request.url.path
         if request.url.query:
             target = f"{target}?{request.url.query}"
+            
+        client = httpx.AsyncClient(timeout=timeout)
+        req = client.build_request(
+            request.method,
+            target,
+            headers=headers,
+            content=request.stream(),
+        )
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                upstream = await client.request(
-                    request.method,
-                    target,
-                    headers=headers,
-                    content=body if body else None,
-                )
+            r = await client.send(req, stream=True)
+            
             resp_headers = {
                 k: v
-                for k, v in upstream.headers.items()
+                for k, v in r.headers.items()
                 if k.lower() not in _HOP_HEADERS
             }
-            return Response(
-                content=upstream.content,
-                status_code=upstream.status_code,
+            
+            async def cleanup(resp=r, cli=client):
+                await resp.aclose()
+                await cli.aclose()
+                
+            return StreamingResponse(
+                r.aiter_raw(),
+                status_code=r.status_code,
                 headers=resp_headers,
+                background=BackgroundTask(cleanup)
             )
         except httpx.ConnectError as e:
+            await client.aclose()
             last_error = e
             if idx + 1 < len(bases):
                 continue
         except httpx.HTTPError as e:
+            await client.aclose()
             raise HTTPException(status_code=502, detail=f"Ошибка сервиса {module}: {e}") from e
 
     service = MODULE_SERVICES.get(module, module)
