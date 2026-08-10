@@ -130,6 +130,7 @@ def service_catalog(
             volumes=(
                 "convert-data:/data",
                 f"{root_s}:{root_s}",
+                {"type": "bind", "source": f"{root_s}/mnt/smb", "target": "/data/smb", "bind": {"propagation": "rslave"}},
             ),
             labels={"com.centurylinklabs.watchtower.enable": "true"},
         ),
