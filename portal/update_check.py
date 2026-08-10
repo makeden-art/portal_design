@@ -17,6 +17,7 @@ VERSION_URLS: dict[str, str] = {
     "convert-to-pdf": "https://raw.githubusercontent.com/makeden-art/Convert-to-PDF/main/VERSION",
     "lisp-calc": "https://raw.githubusercontent.com/makeden-art/lisp_Nikolay/main/VERSION",
     "norm-control": "https://raw.githubusercontent.com/makeden-art/Documentation-compliance-control/main/VERSION",
+    "masha-print": "https://raw.githubusercontent.com/makeden-art/masha-print/main/VERSION",
 }
 
 _ENV_URL_KEYS = {
@@ -24,12 +25,14 @@ _ENV_URL_KEYS = {
     "convert-to-pdf": "CONVERT_VERSION_URL",
     "lisp-calc": "CALC_VERSION_URL",
     "norm-control": "NORM_VERSION_URL",
+    "masha-print": "MASHA_VERSION_URL",
 }
 
 _MODULE_SERVICE_BASE = {
     "lisp-calc": lambda: os.getenv("CALC_SERVICE_URL", "http://lisp-calc:8000").rstrip("/"),
     "norm-control": lambda: os.getenv("NORM_SERVICE_URL", "http://norm-control:8000").rstrip("/"),
     "convert-to-pdf": lambda: os.getenv("CONVERT_SERVICE_URL", "http://convert-to-pdf:8000").rstrip("/"),
+    "masha-print": lambda: os.getenv("MASHA_SERVICE_URL", "http://masha-print:8000").rstrip("/"),
 }
 
 
@@ -145,5 +148,10 @@ async def check_all_updates() -> dict[str, Any]:
         row = await _check_component_update(module_id, component_id)
         if row:
             modules.append(row)
+            
+    masha = await _check_component_update("masha-print", "masha-print")
+    if masha:
+        modules.append(masha)
+        
     has_any = portal["has_update"] or any(m["has_update"] for m in modules)
     return {"portal": portal, "modules": modules, "has_any_update": has_any}
